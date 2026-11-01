@@ -22,10 +22,11 @@ function initSortable() {
     var listEl = document.getElementById('questionListSortable');
     if (!listEl || typeof Sortable === 'undefined') return;
     Sortable.create(listEl, {
-        handle: '.drag-handle',
         animation: 150,
         ghostClass: 'sortable-ghost',
         chosenClass: 'sortable-chosen',
+        filter: '.q-list-actions, .q-list-actions *',
+        preventOnFilter: false,
         onEnd: function () {
             updateQuestionNumberLabels();
             var items = listEl.querySelectorAll('.q-list-item');

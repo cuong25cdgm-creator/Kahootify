@@ -68,13 +68,13 @@
     display: flex;
     align-items: flex-start;
     gap: 12px;
-    max-width: 1120px;
+    max-width: 1160px;
     margin: 0 auto;
     padding: 0 20px 32px;
 }
 
 .q-list-panel {
-    width: 216px;
+    width: 250px;
     flex-shrink: 0;
     background: #fff;
     border-radius: 12px;
@@ -104,20 +104,26 @@
 
 .q-list-item {
     display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 8px 6px;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 8px;
     border-radius: 8px;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
     border: 2px solid transparent;
     background: #f7f7fb;
     transition: all 0.15s;
-    cursor: default;
+    cursor: grab;
+    user-select: none;
 }
 
 .q-list-item:hover {
     background: #ede8fb;
     border-color: #c4b0ee;
+}
+
+.q-list-item:active,
+.q-list-item.sortable-chosen {
+    cursor: grabbing;
 }
 
 .q-list-item.active-edit {
@@ -126,16 +132,16 @@
 }
 
 .drag-handle {
-    color: #ccc;
+    color: #cbd5e1;
     font-size: 13px;
-    cursor: grab;
-    padding: 0 2px;
+    padding: 2px 1px 0;
     user-select: none;
     flex-shrink: 0;
+    transition: color 0.15s;
 }
 
-.drag-handle:active {
-    cursor: grabbing;
+.q-list-item:hover .drag-handle {
+    color: #64748b;
 }
 
 .q-thumb-content {
@@ -166,6 +172,100 @@
     margin-top: 2px;
 }
 
+/* Mini Answers in Question List (Option B: 2x2 Grid like Kahoot) */
+.q-thumb-answers {
+    margin-top: 6px;
+    width: 100%;
+}
+
+.q-answers-grid-mini {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 4px !important;
+    width: 100% !important;
+}
+
+.q-mini-ans {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 3px !important;
+    padding: 3px 6px !important;
+    border-radius: 5px !important;
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    border: 1px solid transparent !important;
+    transition: all 0.15s ease;
+}
+
+.q-mini-shape {
+    font-size: 8px !important;
+    opacity: 0.85 !important;
+    flex-shrink: 0 !important;
+    line-height: 1 !important;
+}
+
+/* Wrong answer: neutral gray */
+.q-mini-ans.is-wrong {
+    background: #f1f5f9 !important;
+    color: #64748b !important;
+    border-color: #cbd5e1 !important;
+}
+
+.q-mini-ans.is-wrong .q-mini-ans-text,
+.q-mini-ans.is-wrong .q-mini-icon,
+.q-mini-ans.is-wrong .q-mini-shape {
+    color: #64748b !important;
+}
+
+/* Correct answer: TÔ MÀU XANH LÁ ĐẬM NỔI BẬT CHUẨN KAHOOT */
+.q-mini-ans.is-correct {
+    background: #16a34a !important;
+    color: #ffffff !important;
+    border-color: #15803d !important;
+    font-weight: 700 !important;
+    box-shadow: 0 1px 2px rgba(22, 163, 74, 0.25) !important;
+}
+
+.q-mini-ans.is-correct .q-mini-ans-text,
+.q-mini-ans.is-correct .q-mini-icon,
+.q-mini-ans.is-correct .q-mini-shape,
+.q-mini-ans.is-correct .q-mini-check {
+    color: #ffffff !important;
+}
+
+.q-mini-ans-text {
+    flex: 1 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.q-mini-check {
+    font-size: 10px !important;
+    color: #ffffff !important;
+    flex-shrink: 0 !important;
+    margin-left: 2px !important;
+}
+
+.q-mini-icon {
+    font-size: 10px !important;
+    flex-shrink: 0 !important;
+}
+
+.q-mini-icon-img {
+    font-size: 10px !important;
+}
+
+/* Text question mode: single row spanning 100% */
+.q-thumb-answers.text-mode .q-mini-ans {
+    width: 100% !important;
+    padding: 4px 8px !important;
+}
+
 .q-list-actions {
     display: flex;
     flex-direction: column;
@@ -173,6 +273,8 @@
     flex-shrink: 0;
     opacity: 0;
     transition: opacity 0.15s;
+    margin-top: 2px;
+    cursor: default;
 }
 
 .q-list-item:hover .q-list-actions {

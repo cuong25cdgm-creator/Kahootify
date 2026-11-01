@@ -138,6 +138,17 @@ function room_join_error($room, $isLocked = null) {
     if (!$room || $room['status'] === 'finished') {
         return 'Invalid Game PIN or room has closed!';
     }
+    if (!empty($room['is_review_mode'])) {
+        $now = time();
+        $start = !empty($room['review_start_time']) ? strtotime($room['review_start_time']) : 0;
+        $end = !empty($room['review_end_time']) ? strtotime($room['review_end_time']) : PHP_INT_MAX;
+        if ($start > 0 && $now < $start) {
+            return 'Review session has not opened yet. Starts at: ' . date('M d, Y H:i', $start);
+        }
+        if ($end > 0 && $now > $end) {
+            return 'Review session ended at: ' . date('M d, Y H:i', $end);
+        }
+    }
     if ($isLocked ?? room_is_locked($room)) {
         return 'This game is locked. Please wait for the host to unlock it.';
     }
@@ -163,17 +174,20 @@ function join_room_player($roomId, $pin, $nickname, $characterId = null, $access
             return ['success' => false, 'message' => $error];
         }
 
-        $existing = db_fetch_one(
-            'SELECT id_player FROM players WHERE id_room = :r AND nickname = :nick LIMIT 1',
-            [':r' => $roomId, ':nick' => $nickname]
-        );
-        if ($existing) {
-            $nickname .= '_' . mt_rand(10, 99);
+        // Trong chế độ multiplayer thường: không cho trùng tên (thêm hậu tố ngẫu nhiên)
+        if (empty($currentRoom['is_review_mode'])) {
+            $existing = db_fetch_one(
+                'SELECT id_player FROM players WHERE id_room = :r AND nickname = :nick LIMIT 1',
+                [':r' => $roomId, ':nick' => $nickname]
+            );
+            if ($existing) {
+                $nickname .= '_' . mt_rand(10, 99);
+            }
         }
         $playerId = db_insert(
             'INSERT INTO players (id_room, nickname, score, answers_correct, is_kicked, character_id, accessory_id) VALUES (:r, :nick, 0, 0, 0, :char, :acc)',
             [':r' => $roomId, ':nick' => $nickname, ':char' => ($characterId ?: '1500'), ':acc' => ($accessoryId ?: '')]
-            );
+        );
         $pdo->commit();
         return ['success' => true, 'id_player' => $playerId, 'nickname' => $nickname];
     } catch (Throwable $error) {

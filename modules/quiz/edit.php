@@ -157,10 +157,91 @@ $defaultPoints = $_SESSION['last_points_' . $quizId]
     ?? (!empty($questions) ? end($questions)['points'] : 1000);
 
 $pageTitle      = 'Edit Quiz: ' . htmlspecialchars($quiz['name']);
-$extraCss       = BASE_URL . 'assets/css/edit-quiz.css';
+$extraCss       = BASE_URL . 'assets/css/edit-quiz.css?v=' . (file_exists(__DIR__ . '/../../assets/css/edit-quiz.css') ? filemtime(__DIR__ . '/../../assets/css/edit-quiz.css') : time());
 require_once __DIR__ . '/../../includes/header.php';
 require_once __DIR__ . '/../../includes/navbar.php';
+?>
 
+<style>
+/* Kahoot 2x2 Mini Grid Answers */
+.q-thumb-answers {
+    margin-top: 6px;
+    width: 100%;
+}
+.q-answers-grid-mini {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 4px !important;
+    width: 100% !important;
+}
+.q-mini-ans {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 3px !important;
+    padding: 3px 6px !important;
+    border-radius: 5px !important;
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    border: 1px solid transparent !important;
+}
+.q-mini-shape {
+    font-size: 8px !important;
+    opacity: 0.85 !important;
+    flex-shrink: 0 !important;
+    line-height: 1 !important;
+}
+/* Đáp án sai: tô màu xám */
+.q-mini-ans.is-wrong {
+    background: #f1f5f9 !important;
+    color: #64748b !important;
+    border-color: #cbd5e1 !important;
+}
+.q-mini-ans.is-wrong .q-mini-ans-text,
+.q-mini-ans.is-wrong .q-mini-icon,
+.q-mini-ans.is-wrong .q-mini-shape {
+    color: #64748b !important;
+}
+/* Đáp án đúng: TÔ MÀU XANH LÁ ĐẬM NỔI BẬT CHUẨN KAHOOT */
+.q-mini-ans.is-correct {
+    background: #16a34a !important;
+    color: #ffffff !important;
+    border-color: #15803d !important;
+    font-weight: 700 !important;
+    box-shadow: 0 1px 2px rgba(22, 163, 74, 0.25) !important;
+}
+.q-mini-ans.is-correct .q-mini-ans-text,
+.q-mini-ans.is-correct .q-mini-icon,
+.q-mini-ans.is-correct .q-mini-shape,
+.q-mini-ans.is-correct .q-mini-check {
+    color: #ffffff !important;
+}
+.q-mini-ans-text {
+    flex: 1 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+.q-mini-check {
+    font-size: 10px !important;
+    flex-shrink: 0 !important;
+    margin-left: 2px !important;
+}
+.q-mini-icon {
+    font-size: 10px !important;
+    flex-shrink: 0 !important;
+}
+/* Text question mode: 1 hàng full width màu xanh lá */
+.q-thumb-answers.text-mode .q-mini-ans {
+    width: 100% !important;
+    padding: 4px 8px !important;
+}
+</style>
+
+<?php
 $flash = get_flash_message();
 ?>
 
@@ -209,6 +290,71 @@ $flash = get_flash_message();
                                 <?= htmlspecialchars(mb_strimwidth($q['text'] ?? '', 0, 36, '…')) ?>
                             </div>
                             <div class="q-thumb-meta"><?= intval($q['time_limit']) ?>s &bull; <?= number_format(intval($q['points'])) ?> pts</div>
+
+                            <?php
+                            $qType = $q['question_type'] ?? 'multiple_choice';
+                            $answers = $q['answers'] ?? [];
+                            ?>
+                            <?php if ($qType === 'text'): ?>
+                                <?php
+                                $correctText = '';
+                                foreach ($answers as $a) {
+                                    if (!empty($a['is_correct'])) {
+                                        $correctText = $a['text'];
+                                        break;
+                                    }
+                                }
+                                if ($correctText === '' && !empty($answers)) {
+                                    $correctText = $answers[0]['text'];
+                                }
+                                ?>
+                                <?php if ($correctText !== ''): ?>
+                                <div class="q-thumb-answers text-mode">
+                                    <div class="q-mini-ans is-correct" title="<?= htmlspecialchars($correctText) ?>">
+                                        <i class="fas fa-font q-mini-icon"></i>
+                                        <span class="q-mini-ans-text"><?= htmlspecialchars(mb_strimwidth($correctText, 0, 24, '…')) ?></span>
+                                        <i class="fas fa-check q-mini-check"></i>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <?php
+                                $validAnswers = array_filter($answers, function($a) {
+                                    return !empty($a['image_path']) || (isset($a['text']) && trim($a['text']) !== '');
+                                });
+                                $miniShapes = ['▲', '◆', '●', '■'];
+                                $shapeIdx = 0;
+                                ?>
+                                <?php if (!empty($validAnswers)): ?>
+                                <div class="q-thumb-answers">
+                                    <div class="q-answers-grid-mini">
+                                        <?php foreach ($validAnswers as $a): ?>
+                                            <?php
+                                            $shape = $miniShapes[$shapeIdx % 4];
+                                            $shapeIdx++;
+                                            $isCorrect = !empty($a['is_correct']);
+                                            $hasImg = !empty($a['image_path']);
+                                            $ansText = trim($a['text'] ?? '');
+                                            $statusClass = $isCorrect ? 'is-correct' : 'is-wrong';
+                                            $titleText = $hasImg ? ('[Ảnh]' . ($ansText !== '' ? ': ' . $ansText : '')) : $ansText;
+                                            ?>
+                                            <div class="q-mini-ans <?= $statusClass ?>" title="<?= htmlspecialchars($titleText) ?>">
+                                                <span class="q-mini-shape"><?= $shape ?></span>
+                                                <?php if ($hasImg): ?>
+                                                    <i class="fas fa-image q-mini-icon q-mini-icon-img"></i>
+                                                    <span class="q-mini-ans-text"><?= htmlspecialchars($ansText !== '' ? $ansText : 'Ảnh') ?></span>
+                                                <?php else: ?>
+                                                    <span class="q-mini-ans-text"><?= htmlspecialchars(mb_strimwidth($ansText, 0, 11, '…')) ?></span>
+                                                <?php endif; ?>
+                                                <?php if ($isCorrect): ?>
+                                                    <i class="fas fa-check q-mini-check"></i>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+                            <?php endif; ?>
                         </div>
                         <div class="q-list-actions">
                             <button type="button" class="btn-icon" onclick="loadQuestionForEdit(<?= $q['id_question'] ?>)" title="Edit">
@@ -371,6 +517,6 @@ window.KAHOOT_EDIT = {
 };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="<?= BASE_URL ?>assets/js/edit-quiz.js"></script>
+<script src="<?= BASE_URL ?>assets/js/edit-quiz.js?v=<?= file_exists(__DIR__ . '/../../assets/js/edit-quiz.js') ? filemtime(__DIR__ . '/../../assets/js/edit-quiz.js') : time() ?>"></script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>

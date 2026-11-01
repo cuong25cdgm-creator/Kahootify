@@ -23,11 +23,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete') {
     redirect('modules/reports/list.php');
 }
 
-// Fetch all finished rooms hosted by current creator
+// Fetch all finished rooms and active review rooms hosted by current creator
 $sql = "
     SELECT 
         r.id_room,
         r.pin,
+        r.status as room_status,
+        r.is_review_mode,
+        r.review_start_time,
+        r.review_end_time,
         r.roomadd,
         r.roomupdate,
         q.id_quiz,
@@ -44,7 +48,7 @@ $sql = "
     FROM room r
     JOIN quiz q ON r.id_quiz = q.id_quiz
     LEFT JOIN players p ON r.id_room = p.id_room
-    WHERE r.id_creator = :c AND r.status = 'finished'
+    WHERE r.id_creator = :c AND (r.status = 'finished' OR r.is_review_mode = 1)
     GROUP BY r.id_room
     ORDER BY r.id_room DESC
 ";
@@ -194,6 +198,16 @@ require_once __DIR__ . '/../../includes/navbar.php';
                                     <a href="<?= BASE_URL ?>modules/reports/detail.php?id_room=<?= $rep['id_room'] ?>" class="font-weight-bold text-decoration-none" style="color: #0f172a; font-size: 14px;">
                                         <?= htmlspecialchars($rep['quiz_name']) ?>
                                     </a>
+                                    <?php if (!empty($rep['is_review_mode'])): ?>
+                                        <span class="badge badge-info ml-1" style="font-size: 10px;">
+                                            <i class="fas fa-book-reader mr-1"></i>Review
+                                        </span>
+                                        <?php if (($rep['room_status'] ?? '') === 'review_active'): ?>
+                                            <span class="badge badge-success ml-1" style="font-size: 10px;">Active</span>
+                                        <?php else: ?>
+                                            <span class="badge badge-secondary ml-1" style="font-size: 10px;">Closed</span>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
                                     <div style="font-size: 11.5px; color: #94a3b8; margin-top: 2px;">
                                         Session ID: #<?= $rep['id_room'] ?>
                                     </div>
@@ -204,12 +218,25 @@ require_once __DIR__ . '/../../includes/navbar.php';
                                     </span>
                                 </td>
                                 <td class="text-left" style="font-size: 13px;">
-                                    <div class="font-weight-medium" style="color: #334155;">
-                                        <?= date('M d, Y', strtotime($rep['roomadd'] ?? 'now')) ?>
-                                    </div>
-                                    <div style="font-size: 11.5px; color: #94a3b8;">
-                                        <?= date('h:i A', strtotime($rep['roomadd'] ?? 'now')) ?>
-                                    </div>
+                                    <?php if (!empty($rep['is_review_mode'])): ?>
+                                        <?php
+                                        $startStr = !empty($rep['review_start_time']) ? date('M d, Y H:i', strtotime($rep['review_start_time'])) : date('M d, Y H:i', strtotime($rep['roomadd'] ?? 'now'));
+                                        $endStr = !empty($rep['review_end_time']) ? date('M d, Y H:i', strtotime($rep['review_end_time'])) : 'No end date';
+                                        ?>
+                                        <div class="font-weight-medium" style="color: #334155; font-size: 12px;">
+                                            <?= htmlspecialchars($startStr) ?>
+                                        </div>
+                                        <div style="font-size: 11.5px; color: #94a3b8;">
+                                            &rarr; <?= htmlspecialchars($endStr) ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="font-weight-medium" style="color: #334155;">
+                                            <?= date('M d, Y', strtotime($rep['roomadd'] ?? 'now')) ?>
+                                        </div>
+                                        <div style="font-size: 11.5px; color: #94a3b8;">
+                                            <?= date('h:i A', strtotime($rep['roomadd'] ?? 'now')) ?>
+                                        </div>
+                                    <?php endif; ?>
                                 </td>
                                 <td class="text-right">
                                     <span class="saas-numeric font-weight-bold" style="color: #0f172a; font-size: 13.5px;">
@@ -218,7 +245,9 @@ require_once __DIR__ . '/../../includes/navbar.php';
                                     <span style="font-size: 11.5px; color: #64748b;"><?= intval($rep['total_players']) === 1 ? 'player' : 'players' ?></span>
                                 </td>
                                 <td class="text-left">
-                                    <?php if ($rep['total_players'] > 0 && !empty($rep['winner_nickname'])): ?>
+                                    <?php if (!empty($rep['is_review_mode'])): ?>
+                                        <span style="color: #94a3b8; font-size: 13px; font-style: italic;">—</span>
+                                    <?php elseif ($rep['total_players'] > 0 && !empty($rep['winner_nickname'])): ?>
                                         <div class="d-flex align-items-center" style="gap: 6px;">
                                             <i class="fas fa-crown" style="color: #f59e0b; font-size: 13px;" title="Game Winner"></i>
                                             <span class="font-weight-medium text-truncate" style="max-width: 110px; color: #0f172a;" title="<?= htmlspecialchars($rep['winner_nickname']) ?>">

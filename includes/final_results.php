@@ -3,6 +3,7 @@
 require_once __DIR__ . '/player_characters.php';
 $resultsPlayerId = $resultsPlayerId ?? 0;
 $isHostResults = $resultsPlayerId === 0;
+$isReviewMode = !empty($room['is_review_mode']);
 $quiz = db_fetch_one('SELECT name FROM quiz WHERE id_quiz = :q', [':q' => $room['id_quiz']]);
 $questionCount = db_count('questions', 'id_quiz = :q', [':q' => $room['id_quiz']]);
 $participantCount = count($leaderboard);
@@ -113,27 +114,54 @@ $renderMedal = static function (int $rank): string {
 };
 require __DIR__ . '/header.php';
 ?>
-<div class="results-shell <?= $isHostResults ? 'results-host' : 'results-player' ?>" id="finalResults" data-host="<?= $isHostResults ? 'true' : 'false' ?>">
+<div class="results-shell <?= $isHostResults ? 'results-host' : 'results-player' ?> <?= $isReviewMode ? 'is-review-mode' : '' ?>" id="finalResults" data-host="<?= $isHostResults ? 'true' : 'false' ?>" data-review="<?= $isReviewMode ? 'true' : 'false' ?>">
     <canvas class="results-confetti" id="resultsConfetti" aria-hidden="true"></canvas>
     <main class="results-main">
         <?php if ($myResult !== null): ?>
             <section class="results-personal" aria-label="Your final result">
                 <div class="results-personal-main">
-                    <?= $renderMedal($myRank) ?>
-                    <h1 class="results-personal-rank"><?= $myRank ?><sup><?= $rankSuffix($myRank) ?></sup> place</h1>
-                    <p class="results-personal-message"><?= $myRank === 1 ? 'You are the champion!' : ($myRank <= 3 ? 'You made the podium!' : 'Thanks for playing!') ?></p>
-                    <?= player_appearance_image($resultCharacters[$myResult['id_player']], 'results-personal-character') ?>
-                    <p class="results-personal-correct"><?= (int) $myResult['correct_count'] ?> out of <?= $questionCount ?> correct</p>
-                    <p class="results-personal-total">Out of <?= $participantCount ?> <?= $participantCount === 1 ? 'player' : 'players' ?></p>
-                    <div class="results-personal-actions">
-                        <a href="#ceremonyStage" class="results-button results-button-light">View podium</a>
-                        <a href="<?= BASE_URL ?>modules/player/join.php" class="results-button">Join another game</a>
-                    </div>
+                    <?php if ($isReviewMode): ?>
+                        <?php 
+                        $reviewCorrect = (int) ($myResult['correct_count'] ?? $myResult['answers_correct'] ?? 0);
+                        $reviewPct = round(($reviewCorrect / max(1, $questionCount)) * 100);
+                        ?>
+                        <div class="mb-2"><i class="fas fa-book-reader fa-3x text-success"></i></div>
+                        <h1 class="results-personal-rank">Review Results</h1>
+                        <p class="results-personal-message">You have completed all questions!</p>
+                        <?= player_appearance_image($resultCharacters[$myResult['id_player']], 'results-personal-character') ?>
+                        <p class="results-personal-correct font-weight-bold" style="font-size: 1.25rem; color:#15803d;">
+                            <?= $reviewCorrect ?> / <?= $questionCount ?> correct (<?= $reviewPct ?>%)
+                        </p>
+                        <div class="results-personal-actions">
+                            <a href="<?= BASE_URL ?>modules/player/review.php?pid=<?= $resultsPlayerId ?>&token=<?= urlencode($token ?? '') ?>&retake=1" class="results-button results-button-light">
+                                <i class="fas fa-redo mr-1"></i> Retake quiz
+                            </a>
+                        </div>
+                    <?php else: ?>
+                        <?= $renderMedal($myRank) ?>
+                        <h1 class="results-personal-rank"><?= $myRank ?><sup><?= $rankSuffix($myRank) ?></sup> place</h1>
+                        <p class="results-personal-message"><?= $myRank === 1 ? 'You are the champion!' : ($myRank <= 3 ? 'You made the podium!' : 'Thanks for playing!') ?></p>
+                        <?= player_appearance_image($resultCharacters[$myResult['id_player']], 'results-personal-character') ?>
+                        <p class="results-personal-correct"><?= (int) $myResult['correct_count'] ?> out of <?= $questionCount ?> correct</p>
+                        <p class="results-personal-total">Out of <?= $participantCount ?> <?= $participantCount === 1 ? 'player' : 'players' ?></p>
+                        <div class="results-personal-actions">
+                            <a href="#ceremonyStage" class="results-button results-button-light">View podium</a>
+                            <a href="<?= BASE_URL ?>modules/player/join.php" class="results-button">Join another game</a>
+                        </div>
+                    <?php endif; ?>
                 </div>
-                <div class="results-personal-footer"><strong><?= htmlspecialchars($myResult['nickname']) ?></strong><span><?= number_format($myResult['score']) ?> <small>points</small></span></div>
+                <div class="results-personal-footer">
+                    <strong><?= htmlspecialchars($myResult['nickname']) ?></strong>
+                    <?php if ($isReviewMode): ?>
+                        <span class="text-success font-weight-bold"><?= round(((int) ($myResult['correct_count'] ?? $myResult['answers_correct'] ?? 0) / max(1, $questionCount)) * 100) ?>% <small>accuracy</small></span>
+                    <?php else: ?>
+                        <span><?= number_format($myResult['score']) ?> <small>points</small></span>
+                    <?php endif; ?>
+                </div>
             </section>
         <?php endif; ?>
 
+        <?php if (!$isReviewMode): ?>
         <section class="ceremony-stage" id="ceremonyStage" aria-label="Final podium">
             <div class="results-heading">
                 <h1><?= htmlspecialchars($quiz['name'] ?? 'Game results') ?></h1>
@@ -175,6 +203,7 @@ require __DIR__ . '/header.php';
         <?php endif; ?>
             <div class="results-stage-footer"><span class="results-brand">Kahootify!</span><span>Game PIN: <strong><?= htmlspecialchars($room['pin']) ?></strong></span></div>
         </section>
+        <?php endif; ?>
 
         <div class="results-afterparty" id="resultsAfterparty">
         <?php if ($participantCount > 0): ?>
@@ -190,7 +219,7 @@ require __DIR__ . '/header.php';
                     <?php if (!empty($isUserLoggedIn)): ?>
                     <?php if (empty($isUserLoggedIn)): ?>
                     <div class="mb-4 p-3 rounded text-center" style="background: #faf7fe; border: 1px dashed #d0bfe3; color: #46178f; font-size: 13px;">
-                        <i class="fas fa-info-circle mr-1"></i> <a href="#" data-toggle="modal" data-target="#loginModal" class="font-weight-bold" style="color: #46178f; text-decoration: underline;">Đăng nhập</a> để mở tính năng lưu câu hỏi ôn tập vào Dashboard.
+                        <i class="fas fa-info-circle mr-1"></i> <a href="#" data-toggle="modal" data-target="#loginModal" class="font-weight-bold" style="color: #46178f; text-decoration: underline;">Log in</a> to save questions to your dashboard.
                     </div>
                     <?php endif; ?>
                     <section class="results-saved-review" aria-labelledby="resultsSavedReviewTitle">
@@ -279,7 +308,7 @@ require __DIR__ . '/header.php';
                 </section>
             <?php endif; ?>
 
-            <?php if ($participantCount > 3): ?>
+            <?php if (!$isReviewMode && $participantCount > 3): ?>
                 <div class="results-runners" id="resultsRunners">
                     <span>A big hand for our runners-up</span>
                     <?php foreach (array_slice($leaderboard, 3, 2) as $index => $runner): ?>
@@ -288,15 +317,17 @@ require __DIR__ . '/header.php';
                 </div>
             <?php endif; ?>
 
+            <?php if (!$isReviewMode): ?>
             <div class="results-controls">
                 <?php if ($isHostResults): ?>
                     <button class="results-button" id="resultsReplay" type="button" hidden>Replay podium</button>
                 <?php endif; ?>
                 <button class="results-button results-button-light" id="resultsStandingsToggle" type="button" aria-expanded="true" aria-controls="resultsStandings" hidden>Hide full standings</button>
             </div>
+            <?php endif; ?>
         <?php endif; ?>
 
-        <?php if ($participantCount > 0): ?>
+        <?php if (!$isReviewMode && $participantCount > 0): ?>
             <section class="results-standings" id="resultsStandings" aria-labelledby="resultsStandingsTitle">
                 <div class="results-standings-heading"><h2 id="resultsStandingsTitle">Final standings</h2><span><?= $participantCount ?> <?= $participantCount === 1 ? 'player' : 'players' ?></span></div>
                 <div class="results-table-scroll">

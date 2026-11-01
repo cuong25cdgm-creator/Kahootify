@@ -52,7 +52,7 @@ $sqlPlayers = "
             WHERE v.id_player = p.id_player) as total_answered
     FROM players p
     WHERE p.id_room = :r
-    ORDER BY p.score DESC, p.playeradd ASC
+    ORDER BY " . (!empty($room['is_review_mode']) ? "p.answers_correct DESC, p.playeradd ASC" : "p.score DESC, p.playeradd ASC") . "
 ";
 $rawPlayers = db_fetch_all($sqlPlayers, [':r' => $roomId]);
 $players = function_exists('filter_room_players') ? filter_room_players($roomId, $rawPlayers) : $rawPlayers;
@@ -178,6 +178,11 @@ require_once __DIR__ . '/../../includes/navbar.php';
 
             <h2 class="font-weight-bold mb-1" style="font-size: 24px; color: #0f172a; letter-spacing: -0.02em;">
                 <?= htmlspecialchars($room['quiz_name']) ?>
+                <?php if (!empty($room['is_review_mode'])): ?>
+                    <span class="badge badge-info ml-2" style="font-size: 13px; vertical-align: middle;">
+                        <i class="fas fa-book-reader mr-1"></i> Review Mode
+                    </span>
+                <?php endif; ?>
             </h2>
 
             <div class="d-flex flex-wrap align-items-center" style="gap: 14px; font-size: 13px; color: #64748b; margin-top: 4px;">

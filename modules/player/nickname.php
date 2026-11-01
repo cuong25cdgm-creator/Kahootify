@@ -51,7 +51,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canJoin) {
             $_SESSION['player_nickname'] = $nickname;
             $_SESSION['player_room_id'] = $roomId;
 
-            redirect('modules/player/waiting.php?pid=' . $playerId . '&token=' . $playerToken);
+            if (!empty($room['is_review_mode'])) {
+                redirect('modules/player/review.php?pid=' . $playerId . '&token=' . $playerToken);
+            } else {
+                redirect('modules/player/waiting.php?pid=' . $playerId . '&token=' . $playerToken);
+            }
         } else {
             $error = $result['message'];
             $canJoin = false;

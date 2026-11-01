@@ -42,6 +42,7 @@
     function celebrate() {
         stopConfetti();
         if (reducedMotion.matches || !context) return;
+        const isReview = root.dataset.review === 'true';
         const width = window.innerWidth;
         const height = window.innerHeight;
         const scale = Math.min(window.devicePixelRatio || 1, 2);
@@ -49,7 +50,10 @@
         canvas.height = height * scale;
         context.setTransform(scale, 0, 0, scale, 0, 0);
         const colors = ['#ffcf46', '#fff', '#ed619b', '#59cfdf', '#a88aee'];
-        const pieces = Array.from({ length: 110 }, () => ({
+        const pieceCount = isReview ? 35 : 110;
+        const maxDuration = isReview ? 4500 : 14000;
+        const respawnDuration = isReview ? 3000 : 12000;
+        const pieces = Array.from({ length: pieceCount }, () => ({
             x: Math.random() * width, y: -30 - Math.random() * height * 2,
             speed: 100 + Math.random() * 170, drift: (Math.random() - .5) * 80,
             rotation: Math.random() * Math.PI, color: colors[Math.floor(Math.random() * colors.length)]
@@ -60,12 +64,12 @@
             const elapsed = Math.min((now - last) / 1000, .05);
             last = now;
             context.clearRect(0, 0, width, height);
-            context.globalAlpha = Math.min(1, Math.max(0, (14000 - (now - start)) / 1500));
+            context.globalAlpha = Math.min(1, Math.max(0, (maxDuration - (now - start)) / 1500));
             pieces.forEach(piece => {
                 piece.x += piece.drift * elapsed;
                 piece.y += piece.speed * elapsed;
                 piece.rotation += elapsed * 2;
-                if (piece.y > height + 20 && now - start < 12000) {
+                if (piece.y > height + 20 && now - start < respawnDuration) {
                     piece.y = -20;
                     piece.x = Math.random() * width;
                 }
@@ -76,7 +80,7 @@
                 context.fillRect(-4, -6, 8, 12);
                 context.restore();
             });
-            if (now - start < 14000) animationFrame = requestAnimationFrame(draw);
+            if (now - start < maxDuration) animationFrame = requestAnimationFrame(draw);
             else stopConfetti();
         }
         animationFrame = requestAnimationFrame(draw);

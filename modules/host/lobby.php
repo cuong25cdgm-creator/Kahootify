@@ -14,6 +14,10 @@ if (!$room || $room['status'] === 'finished') {
     redirect('modules/auth/dashboard.php');
 }
 
+if (!empty($room['is_review_mode']) || $room['status'] === 'review_active') {
+    redirect('modules/reports/detail.php?id_room=' . $roomId);
+}
+
 if ($room['status'] !== 'waiting') {
     redirect('modules/host/play.php');
 }
@@ -92,6 +96,12 @@ if (isset($_GET['start_game'])) {
 
 if (isset($_GET['cancel_game'])) {
     db_execute("UPDATE room SET status = 'finished' WHERE id_room = :r", [':r' => $roomId]);
+    if (!empty($room['is_review_mode'])) {
+        db_execute("UPDATE quiz SET is_review_mode = 0 WHERE id_quiz = :q", [':q' => $room['id_quiz']]);
+        unset($_SESSION['id_room'], $_SESSION['pin'], $_SESSION['id_quiz']);
+        set_flash_message('info', 'Review session has been stopped.');
+        redirect('modules/quiz/list.php');
+    }
     unset($_SESSION['id_room'], $_SESSION['pin'], $_SESSION['id_quiz']);
     set_flash_message('info', 'Game room has been cancelled!');
     redirect('modules/auth/dashboard.php');
@@ -264,71 +274,110 @@ require_once __DIR__ . '/../../includes/header.php';
         <p class="font-weight-bold mt-2 mb-0">Game PIN: <?= htmlspecialchars($room['pin']) ?></p>
     </dialog>
 
-    <div class="lobby-settings-bar mx-auto mb-3" style="max-width: 540px; width: 90%;">
-        <div class="d-flex justify-content-end align-items-center">
-            <div class="lobby-device-toggle-pill shadow d-inline-flex align-items-center" style="background: #ffffff; border-radius: 50px; padding: 10px 22px; border: 2px solid #ffffff;">
-                <label for="toggleShowQuestions" class="mb-0 mr-3 text-dark font-weight-bold" style="font-family: 'Montserrat', sans-serif; font-size: 0.98rem; font-weight: 800; color: #111111; cursor: pointer; user-select: none;">
-                    Show questions &amp; answers on player devices:
-                </label>
-                <span id="settingStatusLabel" class="badge <?= $showOnPlayers ? 'badge-success' : 'badge-secondary' ?> font-weight-bold mr-3 px-2 py-1" style="font-size: 0.85rem; letter-spacing: 0.5px; cursor: pointer;" onclick="$('#toggleShowQuestions').click()" title="Click to toggle">
-                    <?= $showOnPlayers ? 'ON' : 'OFF' ?>
-                </span>
-                <div class="custom-control custom-switch" style="transform: scale(1.3); transform-origin: center center;">
-                    <input type="checkbox" class="custom-control-input" id="toggleShowQuestions" <?= $showOnPlayers ? 'checked' : '' ?> onchange="updateShowQuestions(this.checked)">
-                    <label class="custom-control-label" for="toggleShowQuestions" style="cursor: pointer;"></label>
+    <?php if (!empty($room['is_review_mode'])): ?>
+        <div class="lobby-review-card mx-auto mb-4 p-4 text-center text-dark shadow" style="max-width: 650px; background: #ffffff; border-radius: 20px;">
+            <span class="badge badge-success px-3 py-2 font-weight-bold mb-2" style="font-size: 13px; border-radius: 20px;">
+                <i class="fas fa-book-reader mr-1"></i> Review Mode (Active)
+            </span>
+            <h4 class="font-weight-bold mt-2" style="color: #46178f;"><?= htmlspecialchars($room['quiz_name'] ?? 'Kahootify') ?></h4>
+            <p class="text-muted small mb-3">
+                Students can take this quiz independently at their own pace using the PIN or link without the host starting the session.
+            </p>
+
+            <?php if (!empty($room['review_start_time']) || !empty($room['review_end_time'])): ?>
+                <div class="p-2 mb-3 rounded font-weight-bold small" style="background: #f1f5f9; color: #334155;">
+                    <i class="far fa-clock mr-1 text-primary"></i> Duration: 
+                    <span><?= !empty($room['review_start_time']) ? date('M d, Y H:i', strtotime($room['review_start_time'])) : 'Immediate' ?></span>
+                    &rarr;
+                    <span><?= !empty($room['review_end_time']) ? date('M d, Y H:i', strtotime($room['review_end_time'])) : 'No end time' ?></span>
                 </div>
+            <?php endif; ?>
+
+            <div class="d-flex justify-content-center align-items-center flex-wrap" style="gap: 12px;">
+                <a href="<?= BASE_URL ?>modules/quiz/list.php" class="btn btn-outline-secondary font-weight-bold px-4 py-2" style="border-radius: 30px;">
+                    <i class="fas fa-arrow-left mr-1"></i> Back to My Kahoots
+                </a>
+                <a href="lobby.php?cancel_game=true" class="btn btn-outline-danger font-weight-bold px-4 py-2" style="border-radius: 30px;" onclick="return confirm('Are you sure you want to stop this review session?');">
+                    <i class="fas fa-stop-circle mr-1"></i> Stop Session
+                </a>
             </div>
         </div>
-    </div>
 
-    <div class="lobby-settings-bar mx-auto mb-4" style="max-width: 540px; width: 90%;">
-        <div class="lobby-device-toggle-pill shadow d-flex flex-column text-dark" style="background: #ffffff; border-radius: 18px; padding: 14px 22px; border: 2px solid #ffffff;">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="font-weight-bold" style="font-family: 'Montserrat', sans-serif; font-size: 0.98rem; font-weight: 800; color: #111111;">
-                    <i class="fas fa-random text-primary mr-1"></i> Questions per game:
-                </span>
-                <span id="lobbyModeStatusBadge" class="badge badge-primary font-weight-bold px-2 py-1" style="font-size: 0.85rem;">
-                    All (<?= $totalQuizQuestions ?> questions)
+        <div class="d-flex justify-content-center align-items-center my-4" style="gap: 20px;">
+            <div class="bg-dark px-4 py-2 rounded-pill shadow">
+                <i class="fas fa-users text-success mr-2"></i>
+                <span class="font-weight-bold" style="font-size: 1.2rem;">
+                    <span id="playerCount"><?= count($players) ?></span> participants
                 </span>
             </div>
-
-            <div class="d-flex flex-column text-left" style="gap: 8px;">
-                <div class="custom-control custom-radio">
-                    <input type="radio" id="lobbyModeAll" name="lobby_question_mode" class="custom-control-input" value="all" checked onchange="syncQuestionSettings('lobby')">
-                    <label class="custom-control-label font-weight-bold text-dark" for="lobbyModeAll" style="cursor: pointer; font-size: 0.92rem;">
-                        Play all questions (<span class="text-primary font-weight-bold"><?= $totalQuizQuestions ?> questions</span>)
+        </div>
+    <?php else: ?>
+        <div class="lobby-settings-bar mx-auto mb-3" style="max-width: 540px; width: 90%;">
+            <div class="d-flex justify-content-end align-items-center">
+                <div class="lobby-device-toggle-pill shadow d-inline-flex align-items-center" style="background: #ffffff; border-radius: 50px; padding: 10px 22px; border: 2px solid #ffffff;">
+                    <label for="toggleShowQuestions" class="mb-0 mr-3 text-dark font-weight-bold" style="font-family: 'Montserrat', sans-serif; font-size: 0.98rem; font-weight: 800; color: #111111; cursor: pointer; user-select: none;">
+                        Show questions &amp; answers on player devices:
                     </label>
-                </div>
-                <div class="custom-control custom-radio d-flex align-items-center flex-wrap">
-                    <input type="radio" id="lobbyModeRandom" name="lobby_question_mode" class="custom-control-input" value="random" onchange="syncQuestionSettings('lobby')">
-                    <label class="custom-control-label font-weight-bold text-dark mr-2 mb-0" for="lobbyModeRandom" style="cursor: pointer; font-size: 0.92rem;">
-                        Random selection
-                    </label>
-                    <div class="d-inline-flex align-items-center" style="gap: 6px;">
-                        <input type="number" id="lobbyQuestionLimit" class="form-control form-control-sm text-center font-weight-bold text-dark" 
-                               style="width: 75px; height: 32px; border-radius: 8px; border: 2px solid #ced4da;" 
-                               min="1" max="<?= $totalQuizQuestions ?>" 
-                               value="<?= min(5, $totalQuizQuestions) ?>" 
-                               onchange="onLobbyLimitInput()" oninput="onLobbyLimitInput()" onclick="$('#lobbyModeRandom').prop('checked', true); syncQuestionSettings('lobby');">
-                        <span class="font-weight-bold text-muted small">/ <?= $totalQuizQuestions ?> questions in pool</span>
+                    <span id="settingStatusLabel" class="badge <?= $showOnPlayers ? 'badge-success' : 'badge-secondary' ?> font-weight-bold mr-3 px-2 py-1" style="font-size: 0.85rem; letter-spacing: 0.5px; cursor: pointer;" onclick="$('#toggleShowQuestions').click()" title="Click to toggle">
+                        <?= $showOnPlayers ? 'ON' : 'OFF' ?>
+                    </span>
+                    <div class="custom-control custom-switch" style="transform: scale(1.3); transform-origin: center center;">
+                        <input type="checkbox" class="custom-control-input" id="toggleShowQuestions" <?= $showOnPlayers ? 'checked' : '' ?> onchange="updateShowQuestions(this.checked)">
+                        <label class="custom-control-label" for="toggleShowQuestions" style="cursor: pointer;"></label>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <div class="d-flex justify-content-center align-items-center my-4" style="gap: 20px;">
-        <div class="bg-dark px-4 py-2 rounded-pill shadow">
-            <i class="fas fa-users text-success mr-2"></i>
-            <span class="font-weight-bold" style="font-size: 1.2rem;">
-                <span id="playerCount"><?= count($players) ?></span> players
-            </span>
+        <div class="lobby-settings-bar mx-auto mb-4" style="max-width: 540px; width: 90%;">
+            <div class="lobby-device-toggle-pill shadow d-flex flex-column text-dark" style="background: #ffffff; border-radius: 18px; padding: 14px 22px; border: 2px solid #ffffff;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="font-weight-bold" style="font-family: 'Montserrat', sans-serif; font-size: 0.98rem; font-weight: 800; color: #111111;">
+                        <i class="fas fa-random text-primary mr-1"></i> Questions per game:
+                    </span>
+                    <span id="lobbyModeStatusBadge" class="badge badge-primary font-weight-bold px-2 py-1" style="font-size: 0.85rem;">
+                        All (<?= $totalQuizQuestions ?> questions)
+                    </span>
+                </div>
+
+                <div class="d-flex flex-column text-left" style="gap: 8px;">
+                    <div class="custom-control custom-radio">
+                        <input type="radio" id="lobbyModeAll" name="lobby_question_mode" class="custom-control-input" value="all" checked onchange="syncQuestionSettings('lobby')">
+                        <label class="custom-control-label font-weight-bold text-dark" for="lobbyModeAll" style="cursor: pointer; font-size: 0.92rem;">
+                            Play all questions (<span class="text-primary font-weight-bold"><?= $totalQuizQuestions ?> questions</span>)
+                        </label>
+                    </div>
+                    <div class="custom-control custom-radio d-flex align-items-center flex-wrap">
+                        <input type="radio" id="lobbyModeRandom" name="lobby_question_mode" class="custom-control-input" value="random" onchange="syncQuestionSettings('lobby')">
+                        <label class="custom-control-label font-weight-bold text-dark mr-2 mb-0" for="lobbyModeRandom" style="cursor: pointer; font-size: 0.92rem;">
+                            Random selection
+                        </label>
+                        <div class="d-inline-flex align-items-center" style="gap: 6px;">
+                            <input type="number" id="lobbyQuestionLimit" class="form-control form-control-sm text-center font-weight-bold text-dark" 
+                                   style="width: 75px; height: 32px; border-radius: 8px; border: 2px solid #ced4da;" 
+                                   min="1" max="<?= $totalQuizQuestions ?>" 
+                                   value="<?= min(5, $totalQuizQuestions) ?>" 
+                                   onchange="onLobbyLimitInput()" oninput="onLobbyLimitInput()" onclick="$('#lobbyModeRandom').prop('checked', true); syncQuestionSettings('lobby');">
+                            <span class="font-weight-bold text-muted small">/ <?= $totalQuizQuestions ?> questions in pool</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <a href="lobby.php?start_game=true&show_questions=<?= $showOnPlayers ? '1' : '0' ?>" id="btnStartGame" class="btn btn-kahoot btn-kahoot-green btn-lg px-5 py-3 shadow" style="<?= count($players) === 0 ? 'pointer-events: none; opacity: 0.6;' : '' ?>">
-            <i class="fas fa-play mr-2"></i> START GAME
-        </a>
-    </div>
+        <div class="d-flex justify-content-center align-items-center my-4" style="gap: 20px;">
+            <div class="bg-dark px-4 py-2 rounded-pill shadow">
+                <i class="fas fa-users text-success mr-2"></i>
+                <span class="font-weight-bold" style="font-size: 1.2rem;">
+                    <span id="playerCount"><?= count($players) ?></span> players
+                </span>
+            </div>
+
+            <a href="lobby.php?start_game=true&show_questions=<?= $showOnPlayers ? '1' : '0' ?>" id="btnStartGame" class="btn btn-kahoot btn-kahoot-green btn-lg px-5 py-3 shadow" style="<?= count($players) === 0 ? 'pointer-events: none; opacity: 0.6;' : '' ?>">
+                <i class="fas fa-play mr-2"></i> START GAME
+            </a>
+        </div>
+    <?php endif; ?>
 
     <div class="container mt-4" style="max-width: 900px;">
         <h5 class="font-weight-bold mb-3" style="text-shadow: 1px 1px 3px rgba(0,0,0,0.5);">
