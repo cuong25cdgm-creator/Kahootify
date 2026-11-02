@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/room_access.php';
 require_once __DIR__ . '/../../includes/player_characters.php';
 require_once __DIR__ . '/../../includes/modes/GameStateManager.php';
+require_once __DIR__ . '/../../includes/TeamManager.php';
 
 $rawInput = file_get_contents('php://input');
 $jsonData = json_decode($rawInput, true);
@@ -83,13 +84,17 @@ if ($action === 'get_room_status') {
             'is_locked'                 => room_is_locked($room),
             'start_time'                => $room['question_start_time'],
             'show_questions_on_players' => intval($room['show_questions_on_players'] ?? 0),
+            'is_team_mode'              => intval($room['is_team_mode'] ?? 0),
+            'team_count'                => intval($room['team_count'] ?? 2),
         ];
 
         if ($playerId > 0) {
-            $p = db_fetch_one("SELECT id_player, nickname, score, status, eliminated_at_question, elimination_order FROM players WHERE id_player = :p", [':p' => $playerId]);
+            $p = db_fetch_one("SELECT id_player, nickname, score, status, eliminated_at_question, elimination_order, team_id, team_name FROM players WHERE id_player = :p", [':p' => $playerId]);
             if ($p) {
                 $response['player_status'] = $p['status'] ?? 'ACTIVE';
                 $response['player_score']  = intval($p['score'] ?? 0);
+                $response['team_id']       = $p['team_id'] ? intval($p['team_id']) : null;
+                $response['team_name']     = $p['team_name'] ?? null;
 
                 if ($parsed['qid'] > 0) {
                     $log = db_fetch_one(
@@ -117,10 +122,16 @@ if ($action === 'get_players') {
         echo json_encode(['success' => false, 'message' => 'Room does not exist']);
         exit;
     }
-    $players = filter_room_players($roomId, db_fetch_all("SELECT id_player, nickname, score, status FROM players WHERE id_room = :r ORDER BY id_player ASC", [':r' => $roomId]));
+    $players = filter_room_players($roomId, db_fetch_all("SELECT id_player, nickname, score, status, team_id, team_name FROM players WHERE id_room = :r ORDER BY (team_id IS NOT NULL AND team_id > 0) DESC, team_id ASC, id_player ASC", [':r' => $roomId]));
     foreach ($players as &$lobbyPlayer) {
         $appearance = get_player_appearance($room, (int) $lobbyPlayer['id_player']);
         $lobbyPlayer['character_svg'] = player_appearance_image($appearance, 'lobby-character');
+        if (!empty($lobbyPlayer['team_id'])) {
+            $tInfo = TeamManager::getTeamInfo((int)$lobbyPlayer['team_id']);
+            $lobbyPlayer['team_color'] = $tInfo['color'];
+            $lobbyPlayer['team_icon'] = $tInfo['icon'];
+            $lobbyPlayer['team_short_name'] = $tInfo['short_name'];
+        }
     }
     unset($lobbyPlayer);
     echo json_encode([

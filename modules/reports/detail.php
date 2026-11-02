@@ -2,6 +2,8 @@
 
 require_once __DIR__ . '/../../includes/auth_check.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/TeamManager.php';
+require_once __DIR__ . '/../../includes/player_characters.php';
 
 $creatorId = intval($_SESSION['id_creator']);
 $roomId    = intval($_GET['id_room'] ?? $_GET['id'] ?? 0);
@@ -23,6 +25,10 @@ if (!$room) {
     set_flash_message('danger', 'Game report not found or you do not have permission to view it!');
     redirect('modules/quiz/list.php');
 }
+
+$isTeamMode = TeamManager::isTeamMode($room);
+$teamCount = TeamManager::getTeamCount($room);
+$teamLeaderboard = $isTeamMode ? TeamManager::getTeamLeaderboard($roomId) : [];
 
 // 2. Fetch questions played in this session (respecting randomized order if saved)
 $selectedQIds = !empty($room['question_order']) ? json_decode($room['question_order'], true) : null;
@@ -161,6 +167,98 @@ require_once __DIR__ . '/../../includes/navbar.php';
 
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/reports-analytics.css">
 
+<style>
+/* Team Standings in Report */
+.report-team-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.report-team-card {
+    background: #ffffff;
+    border-radius: 14px;
+    padding: 18px 22px;
+    border: 1px solid var(--saas-slate-200);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.report-team-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--team-color, #7c3aed);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+.report-team-strip {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    background: var(--team-color, #7c3aed);
+}
+.report-team-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.report-team-rank-badge {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 1.15rem;
+    color: #fff;
+    background: #64748b;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+.report-team-rank-badge.team-rank-1 {
+    background: linear-gradient(135deg, #ffd700, #ffb300);
+    color: #333;
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.45);
+}
+.report-team-rank-badge.team-rank-2 {
+    background: linear-gradient(135deg, #e0e0e0, #bdbdbd);
+    color: #333;
+    box-shadow: 0 2px 8px rgba(189, 189, 189, 0.45);
+}
+.report-team-rank-badge.team-rank-3 {
+    background: linear-gradient(135deg, #cd7f32, #b87333);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(205, 127, 50, 0.45);
+}
+.report-team-top3-chip {
+    display: inline-flex;
+    align-items: center;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 3px 10px 3px 6px;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: #1e293b;
+}
+.report-team-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #e2e8f0;
+}
+.report-team-avatar svg {
+    width: 100%;
+    height: 100%;
+}
+</style>
+
 <div class="reports-dashboard container my-4" style="max-width: 1140px;">
 
     <!-- 1. Header & Actions (Linear / Stripe Style) -->
@@ -174,6 +272,12 @@ require_once __DIR__ . '/../../includes/navbar.php';
                 <span class="saas-badge saas-badge-amber font-mono font-weight-bold" style="font-size: 11px;">
                     PIN: <?= htmlspecialchars($room['pin']) ?>
                 </span>
+                <?php if ($isTeamMode): ?>
+                    <span style="color: #cbd5e1; font-size: 11px;">/</span>
+                    <span class="saas-badge saas-badge-purple font-weight-bold" style="font-size: 11px;">
+                        <i class="fas fa-users mr-1"></i> Team Mode (<?= $teamCount ?> Teams)
+                    </span>
+                <?php endif; ?>
             </div>
 
             <h2 class="font-weight-bold mb-1" style="font-size: 24px; color: #0f172a; letter-spacing: -0.02em;">
@@ -255,7 +359,7 @@ require_once __DIR__ . '/../../includes/navbar.php';
                     <?= $totalPlayers ?>
                 </div>
                 <div class="saas-kpi-footer">
-                    Students participated in this session
+                    <?= $isTeamMode ? (count($teamLeaderboard) . ' teams participated') : 'Students participated in this session' ?>
                 </div>
             </div>
         </div>
@@ -278,22 +382,33 @@ require_once __DIR__ . '/../../includes/navbar.php';
             </div>
         </div>
 
-        <!-- KPI 3: Average Room Score -->
+        <!-- KPI 3: Champion Team OR Average Score -->
         <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
             <div class="saas-kpi-card saas-kpi-purple">
                 <div class="saas-kpi-header">
-                    <span class="saas-kpi-label" style="color: #6d28d9;">Average Score</span>
+                    <span class="saas-kpi-label" style="color: #6d28d9;"><?= $isTeamMode ? 'Champion Team' : 'Average Score' ?></span>
                     <div class="saas-kpi-icon icon-purple">
-                        <i class="fas fa-award"></i>
+                        <i class="fas <?= $isTeamMode ? 'fa-trophy' : 'fa-award' ?>" style="<?= $isTeamMode ? 'color: #f59e0b;' : '' ?>"></i>
                     </div>
                 </div>
-                <div class="saas-kpi-value tabular-nums">
-                    <?= number_format($avgScore) ?>
-                    <span style="font-size: 13px; font-weight: 500; color: #64748b;">pts</span>
-                </div>
-                <div class="saas-kpi-footer">
-                    Average points per student
-                </div>
+                <?php if ($isTeamMode && !empty($teamLeaderboard)): 
+                    $champ = $teamLeaderboard[0];
+                ?>
+                    <div class="saas-kpi-value text-truncate" style="font-size: 20px; color: <?= htmlspecialchars($champ['color']) ?>;" title="<?= htmlspecialchars($champ['name']) ?>">
+                        <i class="<?= htmlspecialchars($champ['icon']) ?> mr-1"></i> <?= htmlspecialchars($champ['name']) ?>
+                    </div>
+                    <div class="saas-kpi-footer">
+                        <strong><?= number_format($champ['total_score']) ?></strong> pts &bull; <?= $champ['member_count'] ?> members
+                    </div>
+                <?php else: ?>
+                    <div class="saas-kpi-value tabular-nums">
+                        <?= number_format($avgScore) ?>
+                        <span style="font-size: 13px; font-weight: 500; color: #64748b;">pts</span>
+                    </div>
+                    <div class="saas-kpi-footer">
+                        Average points per student
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -332,7 +447,14 @@ require_once __DIR__ . '/../../includes/navbar.php';
     <!-- 3. Segmented Control Tab Navigation (Linear / shadcn style) -->
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div class="saas-tabs-container" role="tablist">
-            <button class="saas-tab-link active" id="tabBtnPlayers" type="button" onclick="switchReportTab('players')">
+            <?php if ($isTeamMode): ?>
+            <button class="saas-tab-link active" id="tabBtnTeams" type="button" onclick="switchReportTab('teams')">
+                <i class="fas fa-users" style="font-size: 12px; color: #7c3aed;"></i>
+                <span>Team Leaderboard</span>
+                <span class="saas-tab-count"><?= count($teamLeaderboard) ?></span>
+            </button>
+            <?php endif; ?>
+            <button class="saas-tab-link <?= $isTeamMode ? '' : 'active' ?>" id="tabBtnPlayers" type="button" onclick="switchReportTab('players')">
                 <i class="fas fa-trophy" style="font-size: 12px; color: #f59e0b;"></i>
                 <span>Players Leaderboard</span>
                 <span class="saas-tab-count"><?= $totalPlayers ?></span>
@@ -345,8 +467,117 @@ require_once __DIR__ . '/../../includes/navbar.php';
         </div>
     </div>
 
-    <!-- 4. TAB 1: PLAYERS LEADERBOARD & PAGINATION -->
-    <div id="tabContentPlayers" class="tab-pane-content">
+    <?php if ($isTeamMode): ?>
+    <!-- 4. TAB 0: TEAM LEADERBOARD (WHEN TEAM MODE IS ACTIVE) -->
+    <div id="tabContentTeams" class="tab-pane-content" style="display: block;">
+        <div class="saas-table-card mb-4">
+            <div class="saas-table-header d-flex justify-content-between align-items-center">
+                <h5 class="saas-table-title mb-0">
+                    <i class="fas fa-users" style="color: #7c3aed; font-size: 14px;"></i>
+                    <span>Team Standings & Leaderboard</span>
+                </h5>
+                <span class="saas-badge saas-badge-purple font-weight-bold">
+                    <?= count($teamLeaderboard) ?> Teams
+                </span>
+            </div>
+
+            <?php if (empty($teamLeaderboard)): ?>
+                <div class="text-center py-5 px-3">
+                    <div class="saas-kpi-icon mx-auto mb-3" style="width: 44px; height: 44px; font-size: 18px; background: #eff6ff; color: #3b82f6; border: 1px dashed #bfdbfe;">
+                        <i class="fas fa-users-slash"></i>
+                    </div>
+                    <h6 class="font-weight-bold" style="color: #0f172a; margin-bottom: 4px;">No team data recorded</h6>
+                    <p class="text-muted mx-auto" style="max-width: 380px; font-size: 13px;">
+                        No team points or answers were recorded in this game session.
+                    </p>
+                </div>
+            <?php else: ?>
+                <div class="p-3 p-md-4">
+                    <div class="report-team-grid">
+                        <?php foreach ($teamLeaderboard as $tRankIdx => $teamItem):
+                            $tRank = $teamItem['rank'] ?? ($tRankIdx + 1);
+                            $rankClass = ($tRank === 1) ? 'team-rank-1' : (($tRank === 2) ? 'team-rank-2' : (($tRank === 3) ? 'team-rank-3' : 'team-rank-other'));
+                        ?>
+                            <div class="report-team-card" style="--team-color: <?= htmlspecialchars($teamItem['color']) ?>;">
+                                <div class="report-team-strip"></div>
+                                <div class="report-team-header">
+                                    <div class="d-flex align-items-center" style="gap: 12px;">
+                                        <div class="report-team-rank-badge <?= $rankClass ?>">
+                                            <?= $tRank ?>
+                                        </div>
+                                        <div>
+                                            <div class="d-flex align-items-center flex-wrap" style="gap: 8px;">
+                                                <h4 class="font-weight-bold mb-0" style="font-size: 1.15rem; color: #0f172a;">
+                                                    <i class="<?= htmlspecialchars($teamItem['icon']) ?> mr-1" style="color: <?= htmlspecialchars($teamItem['color']) ?>;"></i>
+                                                    <?= htmlspecialchars($teamItem['name']) ?>
+                                                </h4>
+                                                <?php if ($tRank === 1): ?>
+                                                    <span class="badge badge-warning text-dark font-weight-bold px-2 py-1" style="font-size: 0.72rem;">
+                                                        <i class="fas fa-trophy mr-1"></i> Champion
+                                                    </span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="small text-muted font-weight-medium mt-1">
+                                                <span class="mr-2"><i class="fas fa-user-friends mr-1 text-primary"></i> <?= $teamItem['member_count'] ?> thành viên</span>
+                                                <span><i class="fas fa-check-circle mr-1 text-success"></i> <?= (int)$teamItem['total_correct'] ?> câu đúng</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex align-items-center" style="gap: 14px;">
+                                        <div class="text-right">
+                                            <div class="font-weight-bold tabular-nums" style="font-size: 1.45rem; color: #1e293b; line-height: 1.1;">
+                                                <?= number_format($teamItem['total_score']) ?>
+                                            </div>
+                                            <small class="text-muted font-weight-bold text-uppercase" style="font-size: 0.72rem;">pts</small>
+                                        </div>
+                                        <button type="button" class="saas-btn saas-btn-outline" style="font-size: 12px; padding: 6px 12px;" onclick="openTeamReportModal(<?= (int)$teamItem['id'] ?>)">
+                                            <span>Chi tiết</span>
+                                            <i class="fas fa-chevron-right ml-1" style="font-size: 10px;"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- TOP 3 PLAYERS IN TEAM -->
+                                <div class="report-team-top3 pt-3 mt-2 border-top">
+                                    <div class="small font-weight-bold text-muted mb-2 text-uppercase d-flex align-items-center" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+                                        <i class="fas fa-medal text-warning mr-1"></i> Top 3 cá nhân cao điểm nhất:
+                                    </div>
+                                    <?php if (!empty($teamItem['top_3_players'])): ?>
+                                        <div class="d-flex flex-wrap" style="gap: 8px;">
+                                            <?php foreach ($teamItem['top_3_players'] as $t3Idx => $topP): 
+                                                $pApp = get_player_appearance($room, (int)$topP['id_player']);
+                                            ?>
+                                                <div class="report-team-top3-chip shadow-sm">
+                                                    <span class="badge badge-warning text-dark font-weight-bold" style="font-size: 0.68rem; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0;">
+                                                        <?= $t3Idx + 1 ?>
+                                                    </span>
+                                                    <span class="report-team-avatar">
+                                                        <?= player_appearance_image($pApp, 'report-mini-avatar') ?>
+                                                    </span>
+                                                    <span class="font-weight-bold text-dark text-truncate" style="max-width: 120px;" title="<?= htmlspecialchars($topP['nickname']) ?>">
+                                                        <?= htmlspecialchars($topP['nickname']) ?>
+                                                    </span>
+                                                    <span class="badge badge-light border text-primary font-weight-bold tabular-nums">
+                                                        <?= number_format($topP['score']) ?> pts
+                                                    </span>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="text-muted small font-italic">Chưa có người chơi nào trong đội này.</div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- 5. TAB 1: PLAYERS LEADERBOARD & PAGINATION -->
+    <div id="tabContentPlayers" class="tab-pane-content" style="<?= $isTeamMode ? 'display: none;' : 'display: block;' ?>">
         <div class="saas-table-card">
             <div class="saas-table-header">
                 <h5 class="saas-table-title">
@@ -376,6 +607,9 @@ require_once __DIR__ . '/../../includes/navbar.php';
                             <tr>
                                 <th class="text-center" style="width: 70px;">Rank</th>
                                 <th class="text-left">Student Nickname</th>
+                                <?php if ($isTeamMode): ?>
+                                    <th class="text-left" style="width: 170px;">Team</th>
+                                <?php endif; ?>
                                 <th class="text-right" style="width: 150px;">Total Score</th>
                                 <th class="text-right" style="width: 150px;">Correct Answers</th>
                                 <th class="text-left" style="width: 260px;">Accuracy Rate</th>
@@ -421,6 +655,11 @@ require_once __DIR__ . '/../../includes/navbar.php';
                                             Submitted <?= intval($p['total_answered']) ?> / <?= $totalQuestions ?> questions
                                         </div>
                                     </td>
+                                    <?php if ($isTeamMode): ?>
+                                    <td class="text-left">
+                                        <?= TeamManager::renderTeamBadge(intval($p['team_id'] ?? 0), $p['team_name'] ?? null) ?>
+                                    </td>
+                                    <?php endif; ?>
                                     <td class="text-right">
                                         <span class="saas-numeric font-weight-bold" style="color: #0f172a; font-size: 14px;">
                                             <?= number_format($p['score']) ?>
@@ -455,7 +694,7 @@ require_once __DIR__ . '/../../includes/navbar.php';
         </div>
     </div>
 
-    <!-- 5. TAB 2: QUESTION ANALYSIS -->
+    <!-- 6. TAB 2: QUESTION ANALYSIS -->
     <div id="tabContentQuestions" class="tab-pane-content" style="display: none;">
         <?php if (empty($questionAnalytics)): ?>
             <div class="saas-table-card text-center py-5 px-3">
@@ -558,25 +797,154 @@ require_once __DIR__ . '/../../includes/navbar.php';
 
 </div>
 
+<!-- MODAL: TEAM DETAIL ROSTER -->
+<div class="modal fade" id="teamReportModal" tabindex="-1" role="dialog" aria-labelledby="teamReportModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+        <div class="modal-content border-0 shadow" style="border-radius: 16px; overflow: hidden;">
+            <div class="modal-header text-white" id="teamReportModalHeader" style="background: linear-gradient(135deg, #1368ce, #46178f);">
+                <div class="d-flex align-items-center" style="gap: 12px;">
+                    <div id="teamReportModalIcon" style="font-size: 1.8rem;">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title font-weight-bold mb-0" id="teamReportModalLabel">Team Detail</h5>
+                        <small id="teamReportModalSubtitle" class="text-white-50">Team standings and member roster</small>
+                    </div>
+                </div>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close" style="opacity: 0.85;">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="d-flex justify-content-around py-3 px-4 bg-light border-bottom text-center">
+                    <div>
+                        <div class="small text-muted font-weight-bold text-uppercase">Thành viên</div>
+                        <div class="font-weight-bold h5 mb-0" id="teamReportMemberCount">0</div>
+                    </div>
+                    <div class="border-left"></div>
+                    <div>
+                        <div class="small text-muted font-weight-bold text-uppercase">Tổng điểm</div>
+                        <div class="font-weight-bold h5 mb-0 text-primary tabular-nums" id="teamReportTotalScore">0 pts</div>
+                    </div>
+                    <div class="border-left"></div>
+                    <div>
+                        <div class="small text-muted font-weight-bold text-uppercase">Tổng câu đúng</div>
+                        <div class="font-weight-bold h5 mb-0 text-success tabular-nums" id="teamReportTotalCorrect">0</div>
+                    </div>
+                </div>
+                <div class="table-responsive p-3" style="max-height: 400px; overflow-y: auto;">
+                    <table class="saas-table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width: 70px;">Rank</th>
+                                <th class="text-left">Student</th>
+                                <th class="text-right" style="width: 130px;">Score</th>
+                                <th class="text-right" style="width: 140px;">Correct</th>
+                                <th class="text-right" style="width: 120px;">Accuracy</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teamReportTableBody">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="saas-btn saas-btn-outline" data-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="<?= BASE_URL ?>assets/js/reports-pagination.js"></script>
 <script>
-function switchReportTab(tabName) {
-    const btnPlayers = document.getElementById('tabBtnPlayers');
-    const btnQuestions = document.getElementById('tabBtnQuestions');
-    const panePlayers = document.getElementById('tabContentPlayers');
-    const paneQuestions = document.getElementById('tabContentQuestions');
+const REPORT_TEAMS = <?= json_encode($teamLeaderboard) ?>;
+const TOTAL_QUESTIONS = <?= intval($totalQuestions) ?>;
 
-    if (tabName === 'players') {
-        btnPlayers.classList.add('active');
-        btnQuestions.classList.remove('active');
-        panePlayers.style.display = 'block';
-        paneQuestions.style.display = 'none';
-    } else {
-        btnQuestions.classList.add('active');
-        btnPlayers.classList.remove('active');
-        paneQuestions.style.display = 'block';
-        panePlayers.style.display = 'none';
+function switchReportTab(tabName) {
+    const tabs = ['teams', 'players', 'questions'];
+    tabs.forEach(t => {
+        const btn = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
+        const pane = document.getElementById('tabContent' + t.charAt(0).toUpperCase() + t.slice(1));
+        if (btn) {
+            if (t === tabName) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+        if (pane) {
+            pane.style.display = (t === tabName) ? 'block' : 'none';
+        }
+    });
+}
+
+function openTeamReportModal(teamId) {
+    const team = REPORT_TEAMS.find(t => Number(t.id) === Number(teamId));
+    if (!team) return;
+
+    const modalHeader = document.getElementById('teamReportModalHeader');
+    if (modalHeader) {
+        modalHeader.style.background = team.bg_gradient || team.color || '#1368ce';
     }
+
+    const title = document.getElementById('teamReportModalLabel');
+    if (title) title.textContent = team.name;
+
+    const icon = document.getElementById('teamReportModalIcon');
+    if (icon) icon.innerHTML = '<i class="' + (team.icon || 'fas fa-users') + '"></i>';
+
+    const sub = document.getElementById('teamReportModalSubtitle');
+    if (sub) sub.textContent = 'Hạng ' + (team.rank || '-') + ' toàn trận • ' + (team.member_count || 0) + ' thành viên';
+
+    const countEl = document.getElementById('teamReportMemberCount');
+    if (countEl) countEl.textContent = team.member_count + ' thành viên';
+
+    const scoreEl = document.getElementById('teamReportTotalScore');
+    if (scoreEl) scoreEl.textContent = Number(team.total_score).toLocaleString() + ' pts';
+
+    const corrEl = document.getElementById('teamReportTotalCorrect');
+    if (corrEl) corrEl.textContent = Number(team.total_correct || 0) + ' câu';
+
+    const tbody = document.getElementById('teamReportTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!team.members || team.members.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted font-weight-bold">Chưa có người chơi nào gia nhập đội này.</td></tr>';
+    } else {
+        team.members.forEach((m, idx) => {
+            const tr = document.createElement('tr');
+            const rankNum = idx + 1;
+            let rankBadge = '<span class="saas-rank-chip saas-rank-other">' + rankNum + '</span>';
+            if (rankNum === 1) rankBadge = '<span class="saas-rank-chip saas-rank-1"><i class="fas fa-crown mr-1" style="color: #ca8a04; font-size: 10px;"></i>1</span>';
+            else if (rankNum === 2) rankBadge = '<span class="saas-rank-chip saas-rank-2"><i class="fas fa-medal mr-1" style="color: #64748b; font-size: 10px;"></i>2</span>';
+            else if (rankNum === 3) rankBadge = '<span class="saas-rank-chip saas-rank-3"><i class="fas fa-award mr-1" style="color: #ea580c; font-size: 10px;"></i>3</span>';
+
+            const correct = Number(m.correct_count || m.answers_correct || 0);
+            const accuracy = TOTAL_QUESTIONS > 0 ? Math.round((correct / TOTAL_QUESTIONS) * 1000) / 10 : 0;
+
+            tr.innerHTML = `
+                <td class="text-center">${rankBadge}</td>
+                <td class="text-left font-weight-medium" style="color: #0f172a;">${escapeHtml(m.nickname || 'Unknown')}</td>
+                <td class="text-right font-weight-bold tabular-nums" style="color: #0f172a;">${Number(m.score || 0).toLocaleString()} <span style="font-size: 11px; color: #94a3b8;">pts</span></td>
+                <td class="text-right tabular-nums">${correct} / ${TOTAL_QUESTIONS}</td>
+                <td class="text-right font-weight-bold tabular-nums" style="color: #334155;">${accuracy}%</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    if (window.jQuery && jQuery('#teamReportModal').modal) {
+        jQuery('#teamReportModal').modal('show');
+    }
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, function(m) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+    });
 }
 
 document.addEventListener('DOMContentLoaded', function() {

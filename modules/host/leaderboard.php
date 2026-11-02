@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../includes/player_characters.php';
 require_once __DIR__ . '/../../includes/modes/GameStateManager.php';
 require_once __DIR__ . '/../../includes/modes/QuestionModeRegistry.php';
 require_once __DIR__ . '/../../includes/modes/WagerCalculator.php';
+require_once __DIR__ . '/../../includes/TeamManager.php';
 
 $roomId = intval($_SESSION['id_room'] ?? 0);
 $room = db_fetch_one("SELECT * FROM room WHERE id_room = :r AND id_creator = :c", [':r' => $roomId, ':c' => (int)$_SESSION['id_creator']]);
@@ -282,6 +283,30 @@ require_once __DIR__ . '/../../includes/header.php';
         </div>
     <?php endif; ?>
 
+    <?php if (!empty($room['is_team_mode'])): 
+        $liveTeamScores = TeamManager::getTeamLeaderboard($roomId);
+    ?>
+        <div class="card border-0 shadow-sm p-3 mb-4" style="border-radius: 16px; background: rgba(255,255,255,0.95);">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <h6 class="font-weight-bold text-dark mb-0"><i class="fas fa-users text-primary mr-2"></i>Tổng điểm các Đội</h6>
+                <span class="badge badge-primary font-weight-bold"><?= count($liveTeamScores) ?> Đội</span>
+            </div>
+            <div class="d-flex flex-wrap" style="gap: 10px;">
+                <?php foreach ($liveTeamScores as $lt): ?>
+                    <div class="flex-grow-1 p-2 rounded shadow-sm text-center" style="background: #fff; border-top: 4px solid <?= $lt['color'] ?>; min-width: 130px;">
+                        <div class="small font-weight-bold" style="color: #444;">
+                            <i class="<?= $lt['icon'] ?> mr-1" style="color: <?= $lt['color'] ?>;"></i><?= htmlspecialchars($lt['short_name']) ?>
+                        </div>
+                        <div class="font-weight-bold" style="font-size: 1.25rem; color: #1368ce;">
+                            <?= number_format($lt['total_score']) ?>
+                        </div>
+                        <small class="text-muted font-weight-bold"><?= $lt['member_count'] ?> người</small>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <!-- Player Standings List (Bảng điểm hiện tại) -->
     <div class="card border-0 leaderboard-card p-3 p-md-4 mb-4">
         <?php if (empty($leaderboard)): ?>
@@ -332,6 +357,14 @@ require_once __DIR__ . '/../../includes/header.php';
                             <div class="d-flex align-items-center flex-wrap" style="min-width: 0;">
                                 <span class="player-nickname font-weight-bold text-dark mr-2 text-truncate">
                                     <?= htmlspecialchars($p['nickname']) ?>
+                                <?php if (!empty($room['is_team_mode']) && !empty($p['team_id'])): 
+                                    $tBadge = TeamManager::getTeamInfo((int)$p['team_id']);
+                                ?>
+                                    <span class="badge mr-2 shadow-sm font-weight-bold" style="background: <?= $tBadge['color'] ?>; color: #fff; font-size: 0.76rem; border-radius: 8px; padding: 2px 7px;">
+                                        <i class="<?= $tBadge['icon'] ?> mr-1"></i><?= htmlspecialchars($tBadge['short_name']) ?>
+                                    </span>
+                                <?php endif; ?>
+
                                 </span>
 
                                 <?php if ($pStatus === 'ELIMINATED'): ?>

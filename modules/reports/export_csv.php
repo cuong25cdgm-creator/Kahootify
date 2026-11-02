@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../../includes/auth_check.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/TeamManager.php';
 
 $creatorId = intval($_SESSION['id_creator']);
 $roomId = intval($_GET['id_room'] ?? $_GET['id'] ?? 0);
@@ -23,6 +24,8 @@ if (!$room) {
     set_flash_message('danger', 'Game report not found or you do not have permission to download it!');
     redirect('modules/reports/list.php');
 }
+
+$isTeamMode = TeamManager::isTeamMode($room);
 
 // Get total questions played in this session
 $selectedQIds = !empty($room['question_order']) ? json_decode($room['question_order'], true) : null;
@@ -57,23 +60,64 @@ echo "\xEF\xBB\xBF";
 
 $output = fopen('php://output', 'w');
 
-// English CSV Column Headers
-fputcsv($output, ['Rank', 'Student Nickname', 'Total Score', 'Correct Answers', 'Total Questions', 'Accuracy Rate (%)']);
+if ($isTeamMode) {
+    $teamLeaderboard = TeamManager::getTeamLeaderboard($roomId);
 
-// Output student records
-foreach ($players as $idx => $p) {
-    $rank = $idx + 1;
-    $correct = intval($p['correct_count'] ?? $p['answers_correct'] ?? 0);
-    $accuracy = $totalQuestions > 0 ? round(($correct / $totalQuestions) * 100, 1) : 0;
+    // 1. Team Leaderboard Standings
+    fputcsv($output, ['--- TEAM LEADERBOARD STANDINGS ---']);
+    fputcsv($output, ['Team Rank', 'Team Name', 'Total Score', 'Correct Answers', 'Members Count']);
+    foreach ($teamLeaderboard as $tRankIdx => $t) {
+        $tRank = $t['rank'] ?? ($tRankIdx + 1);
+        fputcsv($output, [
+            $tRank,
+            $t['name'],
+            intval($t['total_score']),
+            intval($t['total_correct']),
+            intval($t['member_count'])
+        ]);
+    }
+    fputcsv($output, []); // blank row
 
-    fputcsv($output, [
-        $rank,
-        $p['nickname'],
-        intval($p['score']),
-        $correct,
-        $totalQuestions,
-        $accuracy . '%'
-    ]);
+    // 2. Individual Student Standings
+    fputcsv($output, ['--- INDIVIDUAL STUDENT STANDINGS ---']);
+    fputcsv($output, ['Rank', 'Team', 'Student Nickname', 'Total Score', 'Correct Answers', 'Total Questions', 'Accuracy Rate (%)']);
+
+    foreach ($players as $idx => $p) {
+        $rank = $idx + 1;
+        $correct = intval($p['correct_count'] ?? $p['answers_correct'] ?? 0);
+        $accuracy = $totalQuestions > 0 ? round(($correct / $totalQuestions) * 100, 1) : 0;
+        $teamInfo = TeamManager::getTeamInfo(intval($p['team_id'] ?? 0));
+        $teamName = $p['team_name'] ?: ($teamInfo['name'] ?? 'No Team');
+
+        fputcsv($output, [
+            $rank,
+            $teamName,
+            $p['nickname'],
+            intval($p['score']),
+            $correct,
+            $totalQuestions,
+            $accuracy . '%'
+        ]);
+    }
+} else {
+    // English CSV Column Headers
+    fputcsv($output, ['Rank', 'Student Nickname', 'Total Score', 'Correct Answers', 'Total Questions', 'Accuracy Rate (%)']);
+
+    // Output student records
+    foreach ($players as $idx => $p) {
+        $rank = $idx + 1;
+        $correct = intval($p['correct_count'] ?? $p['answers_correct'] ?? 0);
+        $accuracy = $totalQuestions > 0 ? round(($correct / $totalQuestions) * 100, 1) : 0;
+
+        fputcsv($output, [
+            $rank,
+            $p['nickname'],
+            intval($p['score']),
+            $correct,
+            $totalQuestions,
+            $accuracy . '%'
+        ]);
+    }
 }
 
 fclose($output);

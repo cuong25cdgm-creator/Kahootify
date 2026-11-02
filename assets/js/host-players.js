@@ -17,13 +17,22 @@
             const response = await fetch(panel.dataset.apiUrl + 'game_state.php?action=get_players&id_room=' + panel.dataset.roomId, {cache: 'no-store'});
             const data = await response.json();
             if (!response.ok || !data.success || pending || requestedRevision !== revision) return;
-            const signature = JSON.stringify(data.players.map(p => [p.id_player, p.nickname, p.character_svg]));
+            data.players.sort((a, b) => {
+                const aTeam = (a.team_id && a.team_id > 0) ? Number(a.team_id) : 999;
+                const bTeam = (b.team_id && b.team_id > 0) ? Number(b.team_id) : 999;
+                if (aTeam !== bTeam) return aTeam - bTeam;
+                return Number(a.id_player) - Number(b.id_player);
+            });
+            const signature = JSON.stringify(data.players.map(p => [p.id_player, p.nickname, p.team_id, p.character_svg]));
             if (signature !== previousPlayers) {
                 previousPlayers = signature;
                 container.replaceChildren();
                 data.players.forEach(function (player) {
                     const card = document.createElement('div');
                     card.className = 'host-player-card';
+                    if (player.team_id && player.team_color) {
+                        card.style.borderLeft = '4px solid ' + player.team_color;
+                    }
                     const avatar = document.createElement('span');
                     avatar.className = 'host-player-avatar';
                     if (player.character_svg) {
@@ -36,6 +45,17 @@
                     const name = document.createElement('span');
                     name.className = 'host-player-name';
                     name.textContent = player.nickname;
+                    if (player.team_id && player.team_short_name) {
+                        const teamBadge = document.createElement('span');
+                        teamBadge.className = 'badge ml-1 shadow-sm font-weight-bold';
+                        teamBadge.style.background = player.team_color || '#1368ce';
+                        teamBadge.style.color = '#ffffff';
+                        teamBadge.style.fontSize = '0.72rem';
+                        teamBadge.style.borderRadius = '8px';
+                        teamBadge.style.padding = '2px 6px';
+                        teamBadge.innerHTML = '<i class="' + (player.team_icon || 'fas fa-users') + ' mr-1"></i>' + player.team_short_name;
+                        name.appendChild(teamBadge);
+                    }
                     const button = document.createElement('button');
                     button.type = 'button';
                     button.className = 'kick-player';

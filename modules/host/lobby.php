@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../includes/auth_check.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/room_access.php';
 require_once __DIR__ . '/../../includes/player_characters.php';
+require_once __DIR__ . '/../../includes/TeamManager.php';
 
 $roomId = intval($_SESSION['id_room'] ?? 0);
 $creatorId = intval($_SESSION['id_creator']);
@@ -333,6 +334,13 @@ require_once __DIR__ . '/../../includes/header.php';
                 <a class="lobby-join-address" href="<?= htmlspecialchars($joinPageUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener"><?= htmlspecialchars(preg_replace('#^https?://#', '', $joinPageUrl)) ?></a>
                 <p class="text-muted font-weight-bold text-uppercase mt-3 mb-2" style="letter-spacing: 3px; font-size: 0.95rem;">GAME PIN</p>
                 <div class="lobby-pin-number"><?= htmlspecialchars($room['pin']) ?></div>
+                <?php if (!empty($room['is_team_mode'])): ?>
+                    <div class="mt-2">
+                        <span class="badge text-white px-3 py-1 font-weight-bold shadow-sm" style="font-size: 0.92rem; background: linear-gradient(135deg, #1368ce, #46178f); border-radius: 20px;">
+                            <i class="fas fa-users mr-1"></i> TEAM MODE (<?= intval($room['team_count'] ?? 2) ?> TEAMS)
+                        </span>
+                    </div>
+                <?php endif; ?>
                 <div class="mt-3">
                     <button type="button" id="copyJoinLink" class="btn btn-outline-dark font-weight-bold" hidden>
                         <i class="fas fa-link mr-1" aria-hidden="true"></i> Copy join link

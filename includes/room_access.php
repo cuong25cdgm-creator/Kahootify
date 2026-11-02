@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/TeamManager.php';
 // Room locks and removed players are stored directly in MySQL (room.is_locked, players.is_kicked)
 // without generating runtime files on disk.
 
@@ -172,7 +173,7 @@ function room_join_error($room, $isLocked = null) {
     return '';
 }
 
-function join_room_player($roomId, $pin, $nickname, $characterId = null, $accessoryId = null) {
+function join_room_player($roomId, $pin, $nickname, $characterId = null, $accessoryId = null, $teamId = null) {
     $room = db_fetch_one('SELECT * FROM room WHERE id_room = :r AND pin = :pin', [':r' => $roomId, ':pin' => $pin]);
     if (!$room) {
         return ['success' => false, 'message' => room_join_error($room)];
@@ -204,19 +205,34 @@ function join_room_player($roomId, $pin, $nickname, $characterId = null, $access
         $playerStatus = ($isWaiting || $allowLate) ? 'ACTIVE' : 'SPECTATOR';
         $initialScore = ($playerStatus === 'ACTIVE') ? intval($currentRoom['starting_score'] ?? 0) : 0;
 
+        $assignedTeamId = null;
+        $assignedTeamName = null;
+        if (TeamManager::isTeamMode($currentRoom)) {
+            $tVal = intval($teamId ?? 0);
+            $validation = TeamManager::validateTeamJoin($roomId, $tVal);
+            if (!$validation['valid']) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => $validation['message']];
+            }
+            $assignedTeamId = $validation['team_id'];
+            $assignedTeamName = $validation['team_name'];
+        }
+
         $playerId = db_insert(
-            'INSERT INTO players (id_room, nickname, score, answers_correct, is_kicked, character_id, accessory_id, status) VALUES (:r, :nick, :score, 0, 0, :char, :acc, :st)',
+            'INSERT INTO players (id_room, nickname, score, answers_correct, is_kicked, character_id, accessory_id, status, team_id, team_name) VALUES (:r, :nick, :score, 0, 0, :char, :acc, :st, :tid, :tname)',
             [
                 ':r'     => $roomId,
                 ':nick'  => $nickname,
                 ':score' => $initialScore,
                 ':char'  => ($characterId ?: '1500'),
                 ':acc'   => ($accessoryId ?: ''),
-                ':st'    => $playerStatus
+                ':st'    => $playerStatus,
+                ':tid'   => $assignedTeamId,
+                ':tname' => $assignedTeamName
             ]
         );
         $pdo->commit();
-        return ['success' => true, 'id_player' => $playerId, 'nickname' => $nickname, 'status' => $playerStatus];
+        return ['success' => true, 'id_player' => $playerId, 'nickname' => $nickname, 'status' => $playerStatus, 'team_id' => $assignedTeamId, 'team_name' => $assignedTeamName];
     } catch (Throwable $error) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();

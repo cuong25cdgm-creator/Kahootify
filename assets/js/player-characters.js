@@ -67,37 +67,139 @@
     const nickname = form.querySelector('[name="nickname"]');
     const nameStep = document.getElementById('nicknameStep');
     const appearanceStep = document.getElementById('appearanceStep');
+    const teamStep = document.getElementById('teamStep');
+    const selectedTeamInput = document.getElementById('selectedTeamId');
+    const hasTeamStep = !!teamStep;
+
     const next = document.getElementById('joinContinue');
     const back = document.getElementById('joinBack');
     const submit = document.getElementById('joinSubmit');
     const heading = document.getElementById('joinHeading');
     const description = document.getElementById('joinDescription');
     const steps = document.getElementById('joinStepLabel');
-    let editing = false;
-    function showAppearance(show, focus = true) {
-        editing = show;
-        nameStep.hidden = show;
-        appearanceStep.hidden = !show;
-        next.hidden = show;
-        back.hidden = !show;
-        submit.hidden = !show;
-        heading.textContent = show ? 'Make it yours!' : 'Enter your nickname';
-        description.textContent = show ? 'Pick a character, add an accessory, and get ready to play.' : 'This is how you will appear on the big screen.';
-        steps.textContent = show ? '2 / 2 · Your character' : '1 / 2 · Your nickname';
-        if (focus) (show ? document.getElementById('charactersTab') : nickname).focus();
+
+    let currentStep = 0;
+
+    function updateStepUI(stepIndex, focus = true) {
+        currentStep = stepIndex;
+
+        if (hasTeamStep) {
+            teamStep.hidden = (stepIndex !== 0);
+            nameStep.hidden = (stepIndex !== 1);
+            appearanceStep.hidden = (stepIndex !== 2);
+
+            back.hidden = (stepIndex === 0);
+            next.hidden = (stepIndex === 0 || stepIndex === 2);
+            submit.hidden = (stepIndex !== 2);
+
+            if (stepIndex === 0) {
+                heading.textContent = 'Chọn đội của bạn';
+                description.textContent = 'Chọn một đội để gia nhập trước khi đặt tên.';
+                steps.textContent = '1 / 3 · Chọn đội';
+            } else if (stepIndex === 1) {
+                heading.textContent = 'Enter your nickname';
+                description.textContent = 'This is how you will appear on the big screen.';
+                steps.textContent = '2 / 3 · Tên người chơi';
+                if (focus && nickname) nickname.focus();
+            } else if (stepIndex === 2) {
+                heading.textContent = 'Make it yours!';
+                description.textContent = 'Pick a character, add an accessory, and get ready to play.';
+                steps.textContent = '3 / 3 · Nhân vật';
+                if (focus) {
+                    const tab = document.getElementById('charactersTab');
+                    if (tab) tab.focus();
+                }
+            }
+        } else {
+            nameStep.hidden = (stepIndex !== 0);
+            appearanceStep.hidden = (stepIndex !== 1);
+
+            back.hidden = (stepIndex === 0);
+            next.hidden = (stepIndex === 1);
+            submit.hidden = (stepIndex !== 1);
+
+            if (stepIndex === 0) {
+                heading.textContent = 'Enter your nickname';
+                description.textContent = 'This is how you will appear on the big screen.';
+                steps.textContent = '1 / 2 · Your nickname';
+                if (focus && nickname) nickname.focus();
+            } else {
+                heading.textContent = 'Make it yours!';
+                description.textContent = 'Pick a character, add an accessory, and get ready to play.';
+                steps.textContent = '2 / 2 · Your character';
+                if (focus) {
+                    const tab = document.getElementById('charactersTab');
+                    if (tab) tab.focus();
+                }
+            }
+        }
     }
-    function continueJoin() {
-        nickname.value = nickname.value.trim();
-        if (nickname.reportValidity()) showAppearance(true);
+
+    if (hasTeamStep) {
+        const teamCards = teamStep.querySelectorAll('.team-option-card');
+        teamCards.forEach(card => {
+            card.addEventListener('click', () => {
+                if (card.dataset.isFull === '1') return;
+
+                teamCards.forEach(c => {
+                    c.classList.remove('is-selected');
+                    c.style.borderColor = '#e0e0e0';
+                    c.style.boxShadow = 'none';
+                });
+
+                card.classList.add('is-selected');
+                const color = card.style.getPropertyValue('--team-color') || '#1368ce';
+                card.style.borderColor = color;
+                card.style.boxShadow = '0 0 0 3px ' + color;
+
+                if (selectedTeamInput) {
+                    selectedTeamInput.value = card.dataset.teamId;
+                }
+
+                setTimeout(() => {
+                    updateStepUI(1, true);
+                }, 180);
+            });
+        });
     }
-    next.addEventListener('click', continueJoin);
-    back.addEventListener('click', () => showAppearance(false));
-    form.addEventListener('submit', event => {
-        if (!editing) {
-            event.preventDefault();
-            continueJoin();
+
+    next.addEventListener('click', () => {
+        if (hasTeamStep && currentStep === 0) {
+            if (!selectedTeamInput || !selectedTeamInput.value) {
+                alert('Vui lòng chọn một đội tham gia!');
+                return;
+            }
+            updateStepUI(1, true);
+        } else if ((hasTeamStep && currentStep === 1) || (!hasTeamStep && currentStep === 0)) {
+            nickname.value = nickname.value.trim();
+            if (nickname.reportValidity()) {
+                updateStepUI(hasTeamStep ? 2 : 1, true);
+            }
         }
     });
+
+    back.addEventListener('click', () => {
+        if (currentStep > 0) {
+            updateStepUI(currentStep - 1, true);
+        }
+    });
+
+    form.addEventListener('submit', event => {
+        const lastStep = hasTeamStep ? 2 : 1;
+        if (currentStep !== lastStep) {
+            event.preventDefault();
+            next.click();
+        }
+    });
+
     steps.hidden = false;
-    showAppearance(form.dataset.hasError === 'true' && nickname.value.trim() !== '', false);
+    let initialStep = 0;
+    if (form.dataset.hasError === 'true') {
+        if (hasTeamStep && selectedTeamInput && selectedTeamInput.value) {
+            initialStep = nickname.value.trim() !== '' ? 2 : 1;
+        } else if (!hasTeamStep && nickname.value.trim() !== '') {
+            initialStep = 1;
+        }
+    }
+    updateStepUI(initialStep, false);
 })();

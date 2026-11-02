@@ -30,6 +30,7 @@ $sql = "
         r.pin,
         r.roomadd,
         r.roomupdate,
+        r.is_team_mode,
         q.id_quiz,
         q.name as quiz_name,
         COUNT(p.id_player) as total_players,
@@ -192,7 +193,7 @@ require_once __DIR__ . '/../../includes/navbar.php';
                                 </td>
                                 <td class="text-left">
                                     <a href="<?= BASE_URL ?>modules/reports/detail.php?id_room=<?= $rep['id_room'] ?>" class="font-weight-bold text-decoration-none" style="color: #0f172a; font-size: 14px;">
-                                        <?= htmlspecialchars($rep['quiz_name']) ?>
+                                        <?= htmlspecialchars($rep['quiz_name']) ?><?php if (!empty($rep['is_team_mode'])): ?><span class="badge badge-info text-white font-weight-bold ml-1" style="font-size: 10px; border-radius: 6px; vertical-align: middle;"><i class="fas fa-users mr-1"></i>Team</span><?php endif; ?>
                                     </a>
                                     <div style="font-size: 11.5px; color: #94a3b8; margin-top: 2px;">
                                         Session ID: #<?= $rep['id_room'] ?>

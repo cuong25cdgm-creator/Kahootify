@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../includes/auth_check.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/modes/QuestionModeRegistry.php';
+require_once __DIR__ . '/../../includes/TeamManager.php';
 
 $creatorId = intval($_SESSION['id_creator']);
 $quizId    = intval($_GET['id'] ?? 0);
@@ -47,6 +48,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             [':m' => $targetMode, ':mc' => $cfg, ':qz' => $quizId]
         );
         set_flash_message('success', "Applied '{$modeObj->getLabel()}' mode to all eligible questions!");
+        redirect('modules/quiz/edit.php?id=' . $quizId);
+    }
+
+    if ($action === 'update_team_settings') {
+        $isTeam = !empty($_POST['is_team_mode']) ? 1 : 0;
+        $teamCount = max(2, min(10, intval($_POST['team_count'] ?? 2)));
+        $playerLimit = max(0, intval($_POST['team_player_limit'] ?? 0));
+
+        db_execute(
+            "UPDATE quiz SET is_team_mode = :tm, team_count = :tc, team_player_limit = :tpl WHERE id_quiz = :q AND id_creator = :c",
+            [
+                ':tm'  => $isTeam,
+                ':tc'  => $teamCount,
+                ':tpl' => $playerLimit,
+                ':q'   => $quizId,
+                ':c'   => $creatorId
+            ]
+        );
+        set_flash_message('success', 'Cài đặt Team Mode đã được lưu!');
         redirect('modules/quiz/edit.php?id=' . $quizId);
     }
 
@@ -265,6 +285,10 @@ require_once __DIR__ . '/../../includes/navbar.php';
 
 $flash = get_flash_message();
 $isObstacle = ($quiz['game_type'] ?? 'classic') === 'obstacle';
+$isTeamMode = !empty($quiz['is_team_mode']);
+$teamCount = TeamManager::getTeamCount($quiz);
+$teamLimit = TeamManager::getTeamPlayerLimit($quiz);
+$availableTeams = TeamManager::getTeamsForEntity($quiz);
 ?>
 
 <div class="editor-page-wrapper">
@@ -282,6 +306,11 @@ $isObstacle = ($quiz['game_type'] ?? 'classic') === 'obstacle';
             <?php if ($defaultQMode === 'wager' || $hasWagerInQuiz): ?>
                 <span class="badge badge-warning text-dark font-weight-bold py-1 px-2" style="font-size: 0.85rem;">
                     🎲 Mode: Wager
+                </span>
+            <?php endif; ?>
+            <?php if ($isTeamMode): ?>
+                <span class="badge badge-info text-white font-weight-bold py-1 px-2" style="font-size: 0.85rem;" title="Team Mode: <?= $teamCount ?> teams, <?= $teamLimit > 0 ? $teamLimit . ' players/team' : 'unlimited' ?>">
+                    <i class="fas fa-users mr-1"></i> Team Mode (<?= $teamCount ?> Teams)
                 </span>
             <?php endif; ?>
             <?php if ($isObstacle): ?>
@@ -306,6 +335,24 @@ $isObstacle = ($quiz['game_type'] ?? 'classic') === 'obstacle';
                 </button>
             </div>
             <?php endif; ?>
+
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary font-weight-bold dropdown-toggle" type="button" id="quizOptionsDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Quiz Options">
+                    <i class="fas fa-cog mr-1"></i> Option
+                </button>
+                <div class="dropdown-menu dropdown-menu-right shadow border-0" aria-labelledby="quizOptionsDropdown" style="min-width: 220px; border-radius: 12px; padding: 8px;">
+                    <div class="dropdown-header text-uppercase font-weight-bold text-muted px-2 py-1" style="font-size: 0.72rem; letter-spacing: 0.5px;">Tùy chọn nâng cao</div>
+                    <button class="dropdown-item d-flex align-items-center py-2 px-2 rounded" type="button" data-toggle="modal" data-target="#teamModeModal" onclick="$('#teamModeModal').modal('show')">
+                        <i class="fas fa-users mr-2 text-primary"></i>
+                        <span class="font-weight-bold">Team Mode</span>
+                        <?php if ($isTeamMode): ?>
+                            <span class="badge badge-success ml-auto font-weight-bold">ON (<?= $teamCount ?>)</span>
+                        <?php else: ?>
+                            <span class="badge badge-light border ml-auto text-muted font-weight-bold">OFF</span>
+                        <?php endif; ?>
+                    </button>
+                </div>
+            </div>
 
             <a href="<?= BASE_URL ?>modules/host/create_room.php?id_quiz=<?= $quiz['id_quiz'] ?>" class="btn btn-sm font-weight-bold" style="background:#46178f;color:#fff;">
                 <i class="fas fa-play mr-1"></i> Host Game Now
@@ -628,6 +675,128 @@ $isObstacle = ($quiz['game_type'] ?? 'classic') === 'obstacle';
     </div>
 </div>
 <?php endif; ?>
+
+
+<!-- MODAL TEAM MODE SETTINGS -->
+<div class="modal fade" id="teamModeModal" tabindex="-1" role="dialog" aria-labelledby="teamModeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content border-0 shadow" style="border-radius: 16px; overflow: hidden;">
+            <div class="modal-header text-white" style="background: linear-gradient(135deg, #1368ce, #46178f);">
+                <h5 class="modal-title font-weight-bold" id="teamModeModalLabel">
+                    <i class="fas fa-users-cog mr-2"></i>Tùy chỉnh Team Mode
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form action="" method="POST">
+                <input type="hidden" name="action" value="update_team_settings">
+                <div class="modal-body p-4">
+                    <div class="d-flex align-items-center justify-content-between p-3 mb-3 rounded" style="background-color: #f3f0fb; border: 1px solid #e0d7f5;">
+                        <div class="pr-3">
+                            <h6 class="font-weight-bold mb-1" style="color: #46178f;">
+                                <i class="fas fa-toggle-on mr-1"></i> Bật chế độ Team Mode
+                            </h6>
+                            <p class="text-muted small mb-0">
+                                Khi bật, người tham gia sẽ chọn team trước khi đặt tên. Điểm cá nhân sẽ được cộng chung vào tổng điểm của team.
+                            </p>
+                        </div>
+                        <div class="custom-control custom-switch pl-4" style="transform: scale(1.4); transform-origin: right center;">
+                            <input type="checkbox" class="custom-control-input" id="is_team_mode" name="is_team_mode" value="1" <?= $isTeamMode ? 'checked' : '' ?> onchange="toggleTeamModeInputs(this.checked)">
+                            <label class="custom-control-label" for="is_team_mode" style="cursor: pointer;"></label>
+                        </div>
+                    </div>
+
+                    <div id="teamModeFields" style="<?= $isTeamMode ? '' : 'opacity: 0.45; pointer-events: none;' ?>">
+                        <div class="form-group mb-3">
+                            <label class="font-weight-bold text-dark d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-flag text-primary mr-1"></i> Số lượng Team:</span>
+                                <span class="badge badge-primary font-weight-bold px-2 py-1" id="teamCountBadge"><?= $teamCount ?> Teams</span>
+                            </label>
+                            <select name="team_count" id="team_count" class="form-control font-weight-bold" onchange="onTeamCountChange(this.value)">
+                                <?php for ($tc = 2; $tc <= 10; $tc++): ?>
+                                    <option value="<?= $tc ?>" <?= $teamCount == $tc ? 'selected' : '' ?>><?= $tc ?> Đội (Teams)</option>
+                                <?php endfor; ?>
+                            </select>
+                            <small class="text-muted">Chọn từ 2 đến 10 đội tham gia.</small>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label class="font-weight-bold text-dark d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-user-friends text-info mr-1"></i> Giới hạn người chơi mỗi team:</span>
+                                <span class="badge badge-info font-weight-bold px-2 py-1" id="teamLimitBadge"><?= $teamLimit > 0 ? $teamLimit . ' người/team' : 'Không giới hạn' ?></span>
+                            </label>
+                            <input type="number" name="team_player_limit" id="team_player_limit" class="form-control font-weight-bold" min="0" max="100" value="<?= $teamLimit ?>" placeholder="0 = Không giới hạn" oninput="onTeamLimitChange(this.value)">
+                            <small class="text-muted">Đặt là <strong>0</strong> để không giới hạn số người mỗi đội.</small>
+                        </div>
+
+                        <div class="form-group mb-0">
+                            <label class="font-weight-bold text-dark mb-2">Xem trước danh sách Team:</label>
+                            <div class="d-flex flex-wrap" id="teamPreviewContainer" style="gap: 8px;">
+                                <?php foreach ($availableTeams as $t): ?>
+                                    <span class="badge font-weight-bold shadow-sm" style="background: <?= $t['color'] ?>; color: <?= $t['text_color'] ?>; padding: 6px 12px; border-radius: 12px;">
+                                        <i class="<?= $t['icon'] ?> mr-1"></i> <?= htmlspecialchars($t['name']) ?>
+                                    </span>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-secondary font-weight-bold rounded-pill px-3" data-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary font-weight-bold rounded-pill px-4" style="background-color: var(--kahoot-purple); border-color: var(--kahoot-purple);">
+                        <i class="fas fa-save mr-1"></i> Lưu cài đặt
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+const ALL_TEAMS_CATALOG = <?= json_encode(array_values(TeamManager::getTeamsForEntity(['team_count' => 10]))) ?>;
+
+function toggleTeamModeInputs(enabled) {
+    const fields = document.getElementById('teamModeFields');
+    if (!fields) return;
+    if (enabled) {
+        fields.style.opacity = '1';
+        fields.style.pointerEvents = 'auto';
+    } else {
+        fields.style.opacity = '0.45';
+        fields.style.pointerEvents = 'none';
+    }
+}
+
+function onTeamCountChange(val) {
+    const count = parseInt(val) || 2;
+    const badge = document.getElementById('teamCountBadge');
+    if (badge) badge.textContent = count + ' Teams';
+
+    const container = document.getElementById('teamPreviewContainer');
+    if (!container) return;
+    container.innerHTML = '';
+    const slice = ALL_TEAMS_CATALOG.slice(0, count);
+    slice.forEach(t => {
+        const span = document.createElement('span');
+        span.className = 'badge font-weight-bold shadow-sm';
+        span.style.background = t.color;
+        span.style.color = t.text_color;
+        span.style.padding = '6px 12px';
+        span.style.borderRadius = '12px';
+        span.innerHTML = '<i class="' + t.icon + ' mr-1"></i> ' + t.name;
+        container.appendChild(span);
+    });
+}
+
+function onTeamLimitChange(val) {
+    const limit = parseInt(val) || 0;
+    const badge = document.getElementById('teamLimitBadge');
+    if (badge) {
+        badge.textContent = limit > 0 ? (limit + ' người/team') : 'Không giới hạn';
+    }
+}
+</script>
 
 <script>
 window.KAHOOT_EDIT = {

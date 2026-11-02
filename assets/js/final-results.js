@@ -111,6 +111,7 @@
         const champion = winners.find(winner => winner.dataset.place === '1');
         announcement.textContent = champion.dataset.nickname + ' takes first place!';
         if (withConfetti) celebrate();
+        setStandings(true);
     }
 
     function reveal(place, phase) {
